@@ -111,3 +111,21 @@ Bu görevde canlı Supabase bağlantısı, SMTP teslimatı, SQL migration/pgTAP 
 ## Sonraki görev
 
 Gerçek ekip üyelerine çalışan daveti ve kabulü, ekip rolüne göre ekran erişimi, ortak vardiya/taslak/yayımlanmış snapshot tabloları ve bunların RLS kuralları bağlanacak. Bu tur gerçek ekipler Demo planına bağlanmaz; yerel vardiyalar yüklenmez. Cihazlar arası ortak vardiya paylaşımı, talepler, bildirimler ve dışa aktarma bu ayrı aşamaların devamıdır.
+
+## GitHub Actions: izole PostgreSQL erişim testleri
+
+`.github/workflows/supabase-tests.yml`, standart `ubuntu-latest` runner üzerinde resmî `supabase/setup-cli@v3` ile CLI **2.121.0** kurar. Migration, SQL testleri, `supabase/config.toml` veya workflow değiştiğinde main push ve pull request olaylarında çalışır; Actions > Supabase tenant access tests > Run workflow ile elle de başlatılabilir. Yalnız `contents: read` izni kullanılır.
+
+Her çalışma temiz checkout ve runner'ın Docker ortamında geçici bir Supabase PostgreSQL örneği oluşturur. `supabase db start` ardından `supabase db reset --local --no-seed` ile depodaki migration'lar boş yerel test veritabanına uygulanır. `supabase test db --local supabase/tests/tenant_access.sql` gerçek PostgreSQL üzerinde iki yapay kullanıcı ve authenticated/anon rolleriyle testleri çalıştırır. Frankfurt projesine link/login/push yapılmaz; proje anahtarı, Supabase erişim tokenı veya gerçek DB parolası kullanılmaz. Test fixture'ı transaction sonunda rollback olur; geçici container/volume çalışma sonunda `supabase stop --no-backup` ile kaldırılır. Bu temizlik komutu yalnız CI runner'ın geçici verisi içindir.
+
+SQL hatası veya başarısız pgTAP assertion CLI çıkış koduyla işi başarısız kılar. Bash `pipefail` tee'nin hatayı gizlemesini engeller. Ayrıca sonuçta `Files=1, Tests=15` ve `Result: PASS` bulunması zorunludur; eksik/atlanmış testler başarılı sayılmaz. Sonuç, Actions adım loglarında ve başarılı çalışmanın özetinde görülür. Önceden uygulanmış migration dosyaları değiştirilmez; erişim düzeltmesi gerekirse yeni migration eklenir.
+
+Aynı testi Docker + Supabase CLI 2.121.0 ile yalnız boş/atılabilir yerel test ortamında çalıştırmak için:
+
+```powershell
+supabase db start
+supabase db reset --local --no-seed
+supabase test db --local supabase/tests/tenant_access.sql
+```
+
+`db reset --local` o yerel Supabase veritabanını sıfırlar; mevcut geliştirme verilerinizi içeren bir yerel veritabanında kullanmayın. Uygulamanın yerel Demo deposu bu işlemlerden ayrıdır.
