@@ -165,3 +165,28 @@ Bekleyen talepler onaylı izin olarak gösterilmez. Onaylı günler haftalık pr
 Yeni migration: `supabase/migrations/202610230004_team_leave_requests.sql`. **Frankfurt’a uygulanmadı.** Kurulum ve kısa iki hesaplı kabul senaryosu [Supabase rehberinde](docs/SUPABASE.md#tam-gün-izin-talepleri-ve-yönetici-onayı). Geliştirme projesine kendi yetkinizle uygulayıp yeni istemciyi derledikten sonra gerçek izin kabul kontrolünü yapın.
 
 [İzole PostgreSQL Actions](https://github.com/veles1010/vardiya/actions/runs/39959977345): **168/168 SQL assertion**, mevcut davet/plan yarışları ve beş yeni izin eşzamanlılık yarışı geçti. Flutter’da **67/67 test** (57 mevcut + 10 yeni), format, analiz ve web release derlemesi geçti; yeni Flutter testleri fake adaptör kullanır. Gerçek geliştirme hesabıyla yeni izin akışı ve Android/iOS cihaz kontrolü bu tur yapılmadı. İzin bakiyesi, bordro/yasal hak hesabı, takas, bildirim ve ödeme eklenmedi.
+
+### Android emülatör doğrulaması — 23 Ekim 2026
+
+Mevcut **veles10** AVD (`emulator-5554`, `sdk_gphone64_x86_64`, Android 16 / API 36, 1080×2400, density 420) kullanıldı; başka cihaz kapatılmadı ve uygulama/emülatör verileri sıfırlanmadı. Bu bir **emülatör kontrolüdür**, fiziksel cihaz testi değildir. Flutter 3.47.0 / Dart 3.13.0 ile mevcut yerel yapılandırmadan çalıştırma ve debug APK üretimi başarılı:
+
+```powershell
+flutter run -d emulator-5554 --dart-define-from-file=config/supabase.local.json
+flutter build apk --debug --dart-define-from-file=config/supabase.local.json
+```
+
+APK: `C:\development\vardiya\build\app\outputs\flutter-apk\app-debug.apk`. Yerel yapılandırma ve APK Git’e eklenmez. Android uygulama kimliği `com.vardiya.vardiya` ve `com.vardiya.app://auth/callback` korunur. Android doktor kontrolünde bazı SDK lisansları için uyarı vardı; bu çalıştırma/derlemeyi engellemedi ve lisans veya paket güncellemesi yapılmadı.
+
+Emülatörde bulunan gereksiz üst boşluğun nedeni, ortak tema çubuğu sistem üst alanını tükettikten sonra alt ekranların aynı inset’i yeniden uygulamasıydı. Navigator içeriğinden yalnız tüketilmiş üst padding kaldırıldı; alt güvenli alan ve klavye inset’leri korunur. Soğuk açılışta görülen beyaz pencere parlaması için Android başlangıç/normal pencere zemini varsayılan koyu Flutter yüzeyiyle eşleştirildi; tercih yüklenince Flutter seçili temayı uygular.
+
+Gerçek çalışan uygulamada kontrol edilenler:
+
+- Koyu açılış, Açık/Koyu/Sistem seçimi; Android sistem teması değiştirilince Sistem seçiminin bunu izlemesi. Açık tercih, yalnız Vardiya süreci kapatılıp yeniden açılınca ve Demo kayıtları korunarak geri geldi. Geçici emülatör tema/klavye ayarları eski durumuna getirildi.
+- Demo aylık takvimi, gün seçimi, kişisel günlük liste, ekip haftasının mobil günlük listesi, gece vardiyası bilgisi ve Demo çalışan programına gezinme.
+- Koyu kayıt formunda uzun metin, alt alanlara kaydırma, gerçek ekran klavyesi açıkken Kaydet/Vazgeç erişimi; sistem geri düğmesiyle önce klavyenin, sonra formun kaydetmeden kapanması. Durum çubuğu/kamera alanı ve alt hareket alanı görsel incelendi.
+- Gerçek giriş ekranı; kullanıcı şifresini yalnız uygulamada girerek oturum açtı. Gerçek ekip/üye listesi, yönetici taslak ve yayımlanmış haftalık planı, onaylı İzinli bilgisi, mevcut izin kayıtları ve kaydedilmeden açılıp kapatılan gerçek vardiya formu sunucudan yüklendi. Güncel APK veriler korunarak kurulduktan ve soğuk açılıştan sonra koyu tercih, Demo kayıtları ve gerçek oturumun geri geldiği doğrulandı. Sunucu kayıtları değiştirilmedi.
+- Kimlik bilgisi içermeyen sentetik geçersiz/süresi dolmuş callback intent’leri Türkçe hata mesajıyla karşılandı; uygulama çökmedi. Bu, gerçek doğrulama veya şifre sıfırlama bağlantısının başarılı dönüş testi değildir.
+
+**Format, analiz, 67/67 Flutter testi ve yapılandırılmış Android debug APK derlemesi geçti.** Giriş gerektiren kontroller widget testleri yerine yukarıdaki gerçek emülatör oturumunda ayrıca yapıldı. Ana ekran ve klavye açık Demo formu görüntüleri yerel `build/android-validation/` altında tutulur; gerçek hesap ekran görüntüleri depoya alınmadı.
+
+Kalan Android kontrolleri: ayrı employee hesabıyla yalnız kendi programı/izin başvurusu, davet oluşturma/kabul/iptal, izin kararı ve başarılı e-posta doğrulama/şifre sıfırlama deep link dönüşü. Mevcut owner oturumundan çıkılmadı. Fiziksel Android cihazı ve iOS denenmedi; bu tur web release derlemesi çalıştırılmadı. Web önizlemesi, port ve Supabase yönlendirmeleri değiştirilmedi; migration çalıştırılmadı. Kullanıcının bildirimine göre önceki web ortak planının beş kabul testi ve izin akışı başarılı, dört migration Frankfurt’a uygulanmış durumdadır; bu bilgi yeni Android kabulü olarak sayılmaz.

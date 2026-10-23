@@ -93,7 +93,14 @@ class _VardiyaAppState extends State<VardiyaApp> {
             // Paint the persistent toolbar after Navigator's modal semantics barrier.
             verticalDirection: VerticalDirection.up,
             children: [
-              Expanded(child: child!),
+              Expanded(
+                // The persistent toolbar already consumes the top system inset.
+                child: MediaQuery.removePadding(
+                  context: context,
+                  removeTop: true,
+                  child: child!,
+                ),
+              ),
               ThemeToolbar(
                 mode: mode,
                 onChanged: changeTheme,

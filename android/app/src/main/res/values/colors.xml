@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Match the default Flutter dark surface while preferences load. -->
+    <color name="vardiya_launch_background">#191E22</color>
+</resources>
