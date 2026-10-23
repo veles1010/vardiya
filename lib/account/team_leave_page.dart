@@ -25,14 +25,51 @@ class TeamLeavePage extends StatefulWidget {
 class _TeamLeavePageState extends State<TeamLeavePage> {
   AccountController get c => widget.controller;
   bool entering = true;
+  String? selectedStatus;
+  (String?, String?)? filterScope;
+  static const filters = [
+    (null, 'Tümü'),
+    ('pending', 'Bekliyor'),
+    ('approved', 'Onaylandı'),
+    ('rejected', 'Reddedildi'),
+    ('cancelled', 'İptal/Geri çekildi'),
+  ];
+
+  void resetFilterOnScopeChange() {
+    final scope = (c.user?.id, c.selectedTeam?.id);
+    if (filterScope == scope) return;
+    setState(() {
+      filterScope = scope;
+      selectedStatus = null;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
+    filterScope = (c.user?.id, c.selectedTeam?.id);
+    c.addListener(resetFilterOnScopeChange);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       c.loadLeaves();
       setState(() => entering = false);
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant TeamLeavePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != c) {
+      oldWidget.controller.removeListener(resetFilterOnScopeChange);
+      c.addListener(resetFilterOnScopeChange);
+      resetFilterOnScopeChange();
+    }
+  }
+
+  @override
+  void dispose() {
+    c.removeListener(resetFilterOnScopeChange);
+    super.dispose();
   }
 
   String name(String id) =>
@@ -100,6 +137,14 @@ class _TeamLeavePageState extends State<TeamLeavePage> {
     animation: c,
     builder: (context, _) {
       final team = c.selectedTeam;
+      final requests = c.leaveInbox?.requests ?? const <LeaveRequest>[];
+      final counts = <String?, int>{null: requests.length};
+      for (final request in requests) {
+        counts.update(request.status, (count) => count + 1, ifAbsent: () => 1);
+      }
+      final visible = requests
+          .where((r) => selectedStatus == null || r.status == selectedStatus)
+          .toList();
       return Scaffold(
         appBar: AppBar(
           title: Text(
@@ -160,15 +205,33 @@ class _TeamLeavePageState extends State<TeamLeavePage> {
                     const Text(
                       'İşlemden önce Yenile ile güncel plan ve talepleri alın.',
                     ),
+                  if (!entering && c.leaveInbox != null) ...[
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final (status, label) in filters)
+                          ChoiceChip(
+                            key: ValueKey('leave-filter-${status ?? 'all'}'),
+                            label: Text('$label (${counts[status] ?? 0})'),
+                            selected: selectedStatus == status,
+                            onSelected: (_) =>
+                                setState(() => selectedStatus = status),
+                          ),
+                      ],
+                    ),
+                  ],
                   if (!entering &&
                       !c.loadingLeaves &&
                       c.leaveInbox != null &&
-                      c.leaveInbox!.requests.isEmpty)
-                    const EmptyState('Henüz izin talebi yok.'),
-                  if (!entering)
-                    ...?c.leaveInbox?.requests.map(
-                      (r) => card(r, team.canManage),
+                      visible.isEmpty)
+                    EmptyState(
+                      requests.isEmpty
+                          ? 'Henüz izin talebi yok.'
+                          : 'Seçili duruma uygun izin talebi yok.',
                     ),
+                  if (!entering) ...visible.map((r) => card(r, team.canManage)),
                 ],
               ),
       );

@@ -128,6 +128,147 @@ Widget app(AccountController c, {bool dark = true, bool plan = false}) =>
       home: plan ? TeamPlanPage(controller: c) : TeamLeavePage(controller: c),
     );
 void main() {
+  testWidgets('status counts and empty results wrap at 320px in both themes', (
+    t,
+  ) async {
+    t.view.physicalSize = const Size(320, 800);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.resetPhysicalSize);
+    addTearDown(t.view.resetDevicePixelRatio);
+    for (final dark in [false, true]) {
+      final g = LeaveGateway()
+        ..role = 'manager'
+        ..inbox = LeaveInbox(1, [
+          request(user: 'b'),
+          request(user: 'b', status: 'approved'),
+          request(user: 'a', status: 'cancelled'),
+        ]);
+      final c = await setup(g);
+      await t.pumpWidget(app(c, dark: dark));
+      await t.pumpAndSettle();
+      expect(
+        t
+            .widget<ChoiceChip>(find.byKey(const ValueKey('leave-filter-all')))
+            .selected,
+        isTrue,
+      );
+      for (final label in [
+        'Tümü (3)',
+        'Bekliyor (1)',
+        'Onaylandı (1)',
+        'Reddedildi (0)',
+        'İptal/Geri çekildi (1)',
+      ]) {
+        expect(find.text(label), findsOneWidget);
+      }
+      await click(t, find.text('Onaylandı (1)'));
+      expect(find.text('Onaylandı'), findsOneWidget);
+      expect(find.text('Bekliyor'), findsNothing);
+      await click(t, find.text('İptal/Geri çekildi (1)'));
+      expect(find.text('İptal edildi'), findsOneWidget);
+      await click(t, find.text('Reddedildi (0)'));
+      expect(find.text('Seçili duruma uygun izin talebi yok.'), findsOneWidget);
+      expect(find.text('Henüz izin talebi yok.'), findsNothing);
+      c.error = 'Bağlantı hatası';
+      c.leavesStale = true;
+      c.emit();
+      await t.pumpAndSettle();
+      expect(find.text('Bağlantı hatası'), findsOneWidget);
+      expect(find.textContaining('İşlemden önce Yenile'), findsOneWidget);
+      g.inbox = const LeaveInbox(2, []);
+      await click(t, find.text('Yenile'));
+      expect(find.text('Henüz izin talebi yok.'), findsOneWidget);
+      expect(find.text('Seçili duruma uygun izin talebi yok.'), findsNothing);
+      expect(find.text('Tümü (0)'), findsOneWidget);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      c.dispose();
+    }
+  });
+  testWidgets(
+    'refresh and decision update counts without resetting employee filter',
+    (t) async {
+      final g = LeaveGateway();
+      final c = await setup(g);
+      await t.pumpWidget(app(c));
+      await t.pumpAndSettle();
+      await click(t, find.text('Bekliyor (1)'));
+      final reply = Completer<LeaveInbox>();
+      g.delayed = reply.future;
+      await t.ensureVisible(find.text('Yenile'));
+      await t.tap(find.text('Yenile'));
+      await t.pump();
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      reply.complete(LeaveInbox(2, [request(status: 'approved')]));
+      await t.pumpAndSettle();
+      expect(
+        t
+            .widget<ChoiceChip>(
+              find.byKey(const ValueKey('leave-filter-pending')),
+            )
+            .selected,
+        isTrue,
+      );
+      expect(find.text('Bekliyor (0)'), findsOneWidget);
+      expect(find.text('Onaylandı (1)'), findsOneWidget);
+      expect(find.text('Seçili duruma uygun izin talebi yok.'), findsOneWidget);
+      g.delayed = null;
+      g.inbox = LeaveInbox(3, [request()]);
+      await click(t, find.text('Yenile'));
+      await click(t, find.text('Talebi geri çek'));
+      await click(t, find.text('Talebi geri çek').last);
+      expect(find.text('Bekliyor (0)'), findsOneWidget);
+      expect(find.text('İptal/Geri çekildi (1)'), findsOneWidget);
+      expect(find.text('Seçili duruma uygun izin talebi yok.'), findsOneWidget);
+      expect(find.text('Onayla'), findsNothing);
+      expect(
+        t
+            .widget<ChoiceChip>(
+              find.byKey(const ValueKey('leave-filter-pending')),
+            )
+            .selected,
+        isTrue,
+      );
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+      c.dispose();
+    },
+  );
+  testWidgets('account and team changes reset the status filter to all', (
+    t,
+  ) async {
+    final g = LeaveGateway();
+    final c = await setup(g);
+    await t.pumpWidget(app(c));
+    await t.pumpAndSettle();
+    await click(t, find.text('Onaylandı (0)'));
+    await c.openTeam(const CloudTeam('other', 'Diğer ekip'));
+    await c.loadLeaves();
+    await t.pumpAndSettle();
+    expect(
+      t
+          .widget<ChoiceChip>(find.byKey(const ValueKey('leave-filter-all')))
+          .selected,
+      isTrue,
+    );
+    await click(t, find.text('Onaylandı (0)'));
+    g.identity(const AccountIdentity('b', 'b@example.invalid'));
+    await t.pumpAndSettle();
+    g.inbox = LeaveInbox(1, [request(user: 'b')]);
+    await c.openTeam(const CloudTeam('team', 'İzin ekibi'));
+    await c.loadLeaves();
+    await t.pumpAndSettle();
+    expect(
+      t
+          .widget<ChoiceChip>(find.byKey(const ValueKey('leave-filter-all')))
+          .selected,
+      isTrue,
+    );
+    expect(find.text('Tümü (1)'), findsOneWidget);
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+    c.dispose();
+  });
   test(
     'date-only leave is inclusive and never changes the planned work total',
     () {
@@ -246,6 +387,7 @@ void main() {
       expect(find.text('Onayla'), findsNothing);
       expect(find.text('Reddet'), findsNothing);
       expect(find.text('Bekliyor'), findsOneWidget);
+      await click(t, find.text('Bekliyor (1)'));
       await click(t, find.text('İzin talep et'));
       await click(t, find.textContaining('Başlangıç günü ·'));
       expect(find.byType(CalendarDatePicker), findsOneWidget);
@@ -263,6 +405,15 @@ void main() {
       expect(g.sentEnd!.day, 20);
       expect(g.sentDescription, 'Aile ziyareti');
       expect(g.writes, 1);
+      expect(find.text('Bekliyor (2)'), findsOneWidget);
+      expect(
+        t
+            .widget<ChoiceChip>(
+              find.byKey(const ValueKey('leave-filter-pending')),
+            )
+            .selected,
+        isTrue,
+      );
       expect(t.takeException(), isNull);
       await t.pumpWidget(const SizedBox());
       c.dispose();
@@ -347,6 +498,7 @@ void main() {
       final c = await setup(g);
       await t.pumpWidget(app(c));
       await t.pumpAndSettle();
+      await t.scrollUntilVisible(find.text('Reddet'), 200);
       await click(t, find.text('Reddet'));
       await click(t, find.text('Talebi reddet').last);
       expect(find.text('Gerekçe girin.'), findsOneWidget);
@@ -355,7 +507,9 @@ void main() {
       expect(g.action, 'reject');
       expect(g.reason, 'Uygun tarih seçiniz');
       g.inbox = LeaveInbox(3, [request(user: 'b', status: 'approved')]);
+      await t.scrollUntilVisible(find.text('Yenile'), -200);
       await click(t, find.text('Yenile'));
+      await t.scrollUntilVisible(find.text('Onaylı izni iptal et'), 200);
       await click(t, find.text('Onaylı izni iptal et'));
       await click(t, find.text('Onaylı izni iptal et').last);
       expect(find.text('Gerekçe girin.'), findsOneWidget);
