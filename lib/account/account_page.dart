@@ -23,6 +23,7 @@ class _WorkspaceShellState extends State<WorkspaceShell> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.controller,
     builder: (context, _) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Material(
           color: Theme.of(context).colorScheme.surfaceContainerLow,
@@ -31,6 +32,7 @@ class _WorkspaceShellState extends State<WorkspaceShell> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: Wrap(
+                alignment: WrapAlignment.center,
                 spacing: 12,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
