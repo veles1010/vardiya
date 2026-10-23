@@ -1,0 +1,6 @@
+{
+  "SUPABASE_URL": "https://YOUR_PROJECT.supabase.co",
+  "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_REPLACE_ME",
+  "AUTH_WEB_REDIRECT_URL": "http://127.0.0.1:7357/",
+  "AUTH_MOBILE_REDIRECT_URL": "com.vardiya.app://auth/callback"
+}
