@@ -45,22 +45,25 @@ jobs:
           supabase db start
       - name: Apply migrations to empty local test database
         run: supabase db reset --local --no-seed
-      - name: Run all 97 access, invitation and plan assertions
+      - name: Run all 168 access, invitation, plan and leave assertions
         id: tests
         run: |
           set -euo pipefail
           test -s supabase/tests/tenant_access.sql
           test -s supabase/tests/invitations.sql
           test -s supabase/tests/shared_plans.sql
+          test -s supabase/tests/leave_requests.sql
           supabase test db --local 2>&1 | tee tenant-access.log
           # Fail even if the harness exits zero after discovering no/full fewer tests.
-          grep -Eq 'Files=3, Tests=97([,[:space:]]|$)' tenant-access.log
+          grep -Eq 'Files=4, Tests=168([,[:space:]]|$)' tenant-access.log
           grep -Eq '^Result: PASS[[:space:]]*$' tenant-access.log
-          echo '### PostgreSQL tenant access: 97/97 assertions passed' >> "$GITHUB_STEP_SUMMARY"
+          echo '### PostgreSQL tenant access: 168/168 assertions passed' >> "$GITHUB_STEP_SUMMARY"
       - name: Verify concurrent invitation acceptance
         run: python3 tool/test_invite_concurrency.py
       - name: Verify concurrent plan editing and publication
         run: python3 tool/test_plan_concurrency.py
+      - name: Verify concurrent leave and shift operations
+        run: python3 tool/test_leave_concurrency.py
       - name: Remove disposable local database
         if: always() && steps.cli.outcome == 'success'
         run: supabase stop --no-backup
