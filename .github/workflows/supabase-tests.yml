@@ -7,12 +7,14 @@ on:
       - 'supabase/migrations/**'
       - 'supabase/tests/**'
       - 'supabase/config.toml'
+      - 'tool/test_invite_concurrency.py'
       - '.github/workflows/supabase-tests.yml'
   pull_request:
     paths:
       - 'supabase/migrations/**'
       - 'supabase/tests/**'
       - 'supabase/config.toml'
+      - 'tool/test_invite_concurrency.py'
       - '.github/workflows/supabase-tests.yml'
   workflow_dispatch:
 
@@ -43,16 +45,19 @@ jobs:
           supabase db start
       - name: Apply migrations to empty local test database
         run: supabase db reset --local --no-seed
-      - name: Run all 15 tenant access assertions
+      - name: Run all 48 access and invitation assertions
         id: tests
         run: |
           set -euo pipefail
           test -s supabase/tests/tenant_access.sql
-          supabase test db --local supabase/tests/tenant_access.sql 2>&1 | tee tenant-access.log
+          test -s supabase/tests/invitations.sql
+          supabase test db --local 2>&1 | tee tenant-access.log
           # Fail even if the harness exits zero after discovering no/full fewer tests.
-          grep -Eq 'Files=1, Tests=15([,[:space:]]|$)' tenant-access.log
+          grep -Eq 'Files=2, Tests=48([,[:space:]]|$)' tenant-access.log
           grep -Eq '^Result: PASS[[:space:]]*$' tenant-access.log
-          echo '### PostgreSQL tenant access: 15/15 assertions passed' >> "$GITHUB_STEP_SUMMARY"
+          echo '### PostgreSQL tenant access: 48/48 assertions passed' >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify concurrent invitation acceptance
+        run: python3 tool/test_invite_concurrency.py
       - name: Remove disposable local database
         if: always() && steps.cli.outcome == 'success'
         run: supabase stop --no-backup
