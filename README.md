@@ -108,7 +108,7 @@ Testler; gece vardiyası, eşit saat, önceki günden çakışma, bitişte başl
 
 ## Sonraki aşamalar
 
-1. Gerçek ekipler için çalışan daveti ve kabul akışı (hesap/ekip temeli bu tur eklendi).
+1. Gerçek ekiplerin ortak vardiya verisine bağlanması (hesap/ekip ve e-posta hedefli davet kodu ile kabul akışı eklendi).
 2. Ortak vardiya verisi için sunucu tarafında ekip/rol yetkilendirmesi ve veri doğrulaması (mevcut ekip tablolarında RLS/RPC hazır).
 3. Cihazlar arası paylaşım, senkronizasyon ve eşzamanlı değişiklik çözümü.
 4. İzin ve vardiya değişimi talepleri, yönetici onayı.
@@ -127,3 +127,10 @@ Bu düzeltmede 35 Flutter testi geçti; 320 px ekran ve 280 px klavye alanında 
 ### Hesap/ekip aşaması doğrulaması — 23 Ekim 2026
 
 42 Flutter testi (mevcut 35 + 7 hesap testi), statik analiz ve web release derlemesi geçti. Hesap testleri fake adaptörle oturum geri yükleme, hesap değişimi sırasında eski sonuçların atılması, çıkışta bellek temizliği, geçersiz giriş/süresi dolmuş bağlantı, bağlantı hatası ve 320 px yeni şifre akışını sınar. Bunlar gerçek Supabase erişim testi değildir. `supabase/tests/tenant_access.sql` içindeki 15 pgTAP testi CLI/Docker/Postgres olmadığı için çalıştırılmadı; canlı Auth/SMTP ve Android/iOS deep link kontrolü yapılmadı. Sonraki kurulum adımı: geliştirme Supabase projesine migration uygulayın, Confirm email açıkken SMTP/redirect ayarlarını tamamlayın ve yalnız publishable anahtarla config dosyasını doldurun. Ortak vardiya ve çalışan daveti bu tur bağlanmadı.
+
+
+### Çalışan daveti aşaması
+
+Gerçek hesap bölümünde ekip ayrıntısı, üyeler/roller, e-posta hedefli 7 günlük davet oluşturma/kopyalama/iptal ve kodla önizleme/kabul eklendi. Bu akış davet e-postası göndermez. Yeni migration, güvenlik modeli, CI ve geliştirme projesinde kalan kurulum adımları [Supabase rehberinde](docs/SUPABASE.md#çalışan-davetleri--23-ekim-2026). Eski 15 SQL assertion ile 33 yeni assertion ve ayrı eşzamanlı kabul testi geçici GitHub PostgreSQL ortamında geçti. Frankfurt projesine migration uygulanmadı; ortak vardiya eklenmedi.
+
+Bu aşamanın yerel kontrolleri: **47/47 Flutter testi**, format, analiz ve web release derlemesi başarılı. Flutter davet testleri fake adaptör kullanır; gerçek SQL/RLS kontrolleri ise yukarıda bağlantısı verilen geçici PostgreSQL Actions çalışmasında yapıldı.

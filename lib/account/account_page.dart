@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'account_service.dart';
+import 'invitation_panel.dart';
 
 class WorkspaceShell extends StatefulWidget {
   const WorkspaceShell({
@@ -316,19 +317,27 @@ class _AccountPageState extends State<AccountPage> {
                       (team) => Card(
                         child: ListTile(
                           title: Text(team.name),
-                          trailing: IconButton(
-                            tooltip: 'Ekip adını değiştir',
-                            onPressed: c.busy
-                                ? null
-                                : () => teamDialog(team: team),
-                            icon: const Icon(Icons.edit_outlined),
+                          subtitle: Text(
+                            'Rolünüz: ${roleLabel(team.role)} · Ayrıntı için açın',
                           ),
+                          onTap: c.busy ? null : () => c.openTeam(team),
+                          trailing: !team.canManage
+                              ? null
+                              : IconButton(
+                                  tooltip: 'Ekip adını değiştir',
+                                  onPressed: c.busy
+                                      ? null
+                                      : () => teamDialog(team: team),
+                                  icon: const Icon(Icons.edit_outlined),
+                                ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 20),
+                    InvitationPanel(key: ValueKey(c.user!.id), controller: c),
+                    const SizedBox(height: 20),
                     const Text(
-                      'Çalışan daveti ve ortak vardiya planı sonraki aşamada bağlanacak.',
+                      'Ortak vardiya planı sonraki aşamada bağlanacak.',
                     ),
                   ] else if (mode == 'verify' && !recovery) ...[
                     Text(

@@ -20,8 +20,32 @@ class AccountIdentity {
 }
 
 class CloudTeam {
-  const CloudTeam(this.id, this.name);
-  final String id, name;
+  const CloudTeam(this.id, this.name, {this.role = 'employee'});
+  final String id, name, role;
+  bool get canManage => role == 'owner' || role == 'manager';
+}
+
+class CloudMember {
+  const CloudMember(this.id, this.email, this.role);
+  final String id, email, role;
+}
+
+class PendingInvite {
+  const PendingInvite(this.id, this.email, this.expiresAt);
+  final String id, email;
+  final DateTime expiresAt;
+}
+
+class CreatedInvite {
+  const CreatedInvite(this.id, this.code, this.expiresAt);
+  final String id, code;
+  final DateTime expiresAt;
+}
+
+class InvitePreview {
+  const InvitePreview(this.teamId, this.teamName, this.expiresAt);
+  final String teamId, teamName;
+  final DateTime expiresAt;
 }
 
 abstract interface class AccountGateway {
@@ -36,6 +60,12 @@ abstract interface class AccountGateway {
   Future<List<CloudTeam>> teams();
   Future<void> createTeam(String name);
   Future<void> renameTeam(String id, String name);
+  Future<List<CloudMember>> members(String teamId);
+  Future<List<PendingInvite>> invitations(String teamId);
+  Future<CreatedInvite> createInvitation(String teamId, String email);
+  Future<void> cancelInvitation(String id);
+  Future<InvitePreview> previewInvitation(String code);
+  Future<void> acceptInvitation(String code);
   void dispose();
 }
 
@@ -237,10 +267,17 @@ class SupabaseAccountGateway implements AccountGateway {
   Future<List<CloudTeam>> teams() async {
     final rows = await _client
         .from('teams')
-        .select('id,name')
+        .select('id,name,team_members!inner(user_id,role)')
+        .eq('team_members.user_id', _client.auth.currentUser!.id)
         .order('created_at');
     return rows
-        .map((r) => CloudTeam(r['id'] as String, r['name'] as String))
+        .map(
+          (r) => CloudTeam(
+            r['id'] as String,
+            r['name'] as String,
+            role: (r['team_members'] as List).single['role'] as String,
+          ),
+        )
         .toList();
   }
 
@@ -255,6 +292,75 @@ class SupabaseAccountGateway implements AccountGateway {
       'rename_team',
       params: {'target_team': id, 'team_name': name},
     );
+  }
+
+  @override
+  Future<List<CloudMember>> members(String teamId) async {
+    final rows = await _client.rpc(
+      'list_team_members',
+      params: {'target_team': teamId},
+    );
+    return (rows as List)
+        .map((r) => CloudMember(r['user_id'], r['email'], r['role']))
+        .toList();
+  }
+
+  @override
+  Future<List<PendingInvite>> invitations(String teamId) async {
+    final rows = await _client.rpc(
+      'list_team_invitations',
+      params: {'target_team': teamId},
+    );
+    return (rows as List)
+        .map(
+          (r) => PendingInvite(
+            r['id'],
+            r['target_email'],
+            DateTime.parse(r['expires_at']),
+          ),
+        )
+        .toList();
+  }
+
+  @override
+  Future<CreatedInvite> createInvitation(String teamId, String email) async {
+    final rows = await _client.rpc(
+      'create_team_invitation',
+      params: {'target_team': teamId, 'invite_email': email},
+    );
+    final r = (rows as List).single;
+    return CreatedInvite(
+      r['invitation_id'],
+      r['code'],
+      DateTime.parse(r['expires_at']),
+    );
+  }
+
+  @override
+  Future<void> cancelInvitation(String id) async {
+    await _client.rpc(
+      'cancel_team_invitation',
+      params: {'target_invitation': id},
+    );
+  }
+
+  @override
+  Future<InvitePreview> previewInvitation(String code) async {
+    final rows = await _client.rpc(
+      'preview_team_invitation',
+      params: {'invite_code': code},
+    );
+    final r = (rows as List).single;
+    return InvitePreview(
+      r['team_id'],
+      r['team_name'],
+      DateTime.parse(r['expires_at']),
+    );
+  }
+
+  @override
+  Future<void> acceptInvitation(String code) async {
+    await _client.rpc('accept_team_invitation', params: {'invite_code': code});
   }
 
   @override
@@ -281,7 +387,11 @@ String accountError(Object e) {
     };
   }
   if (e is PostgrestException) {
-    return 'Ekip işlemi reddedildi. Yetkinizi ve veritabanı kurulumunu kontrol edin.';
+    return e.code == '42501'
+        ? 'İşlem yetkiniz yok veya davet geçersiz. Davetin hedef e-postasıyla doğrulanmış hesabı kullanın; davet süresi dolmuş, iptal edilmiş ya da kullanılmış olabilir.'
+        : e.code == '22023'
+        ? 'Geçerli bir e-posta veya ekip adı girin.'
+        : 'Ekip işlemi tamamlanamadı. Bağlantınızı ve veritabanı kurulumunu kontrol edin.';
   }
   return 'Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
 }
@@ -291,6 +401,31 @@ class AccountController extends ChangeNotifier {
   final AccountGateway gateway;
   AccountIdentity? user;
   List<CloudTeam> teams = const [];
+  CloudTeam? selectedTeam;
+  List<CloudMember> teamMembers = const [];
+  List<PendingInvite> pendingInvites = const [];
+  CreatedInvite? createdInvite;
+  InvitePreview? invitePreview;
+  String? _previewCode;
+  bool loadingDetails = false;
+  int _detailGeneration = 0;
+  int _previewGeneration = 0;
+  void clearTeamDetails() {
+    _detailGeneration++;
+    selectedTeam = null;
+    teamMembers = const [];
+    pendingInvites = const [];
+    createdInvite = null;
+    loadingDetails = false;
+  }
+
+  void clearInvitationPreview() {
+    _previewGeneration++;
+    invitePreview = null;
+    _previewCode = null;
+    emit();
+  }
+
   bool ready = false;
   bool restoring = true,
       busy = false,
@@ -338,6 +473,9 @@ class AccountController extends ChangeNotifier {
     if (changed || next == null) {
       _generation++;
       teams = const [];
+      clearTeamDetails();
+      invitePreview = null;
+      _previewCode = null;
       loadingTeams = false;
       notice = null;
     }
@@ -406,6 +544,9 @@ class AccountController extends ChangeNotifier {
     // Invalidate cached/in-flight tenant data before contacting the server.
     _generation++;
     teams = const [];
+    clearTeamDetails();
+    invitePreview = null;
+    _previewCode = null;
     loadingTeams = false;
     emit();
     await run(gateway.signOut);
@@ -426,6 +567,110 @@ class AccountController extends ChangeNotifier {
       if (epoch == _generation) {
         await loadTeams();
       }
+    }
+  }
+
+  Future<void> openTeam(CloudTeam team) async {
+    clearTeamDetails();
+    selectedTeam = team;
+    await loadDetails();
+  }
+
+  Future<void> loadDetails() async {
+    final team = selectedTeam;
+    if (team == null || user == null) {
+      return;
+    }
+    final epoch = _generation, detail = ++_detailGeneration;
+    loadingDetails = true;
+    error = null;
+    emit();
+    try {
+      final results = await Future.wait<Object>([
+        gateway.members(team.id),
+        team.canManage
+            ? gateway.invitations(team.id)
+            : Future.value(<PendingInvite>[]),
+      ]).timeout(const Duration(seconds: 30));
+      if (epoch == _generation && detail == _detailGeneration && !_disposed) {
+        teamMembers = List.unmodifiable(results[0] as List<CloudMember>);
+        pendingInvites = List.unmodifiable(results[1] as List<PendingInvite>);
+      }
+    } catch (e) {
+      if (epoch == _generation && detail == _detailGeneration) {
+        error = accountError(e);
+      }
+    } finally {
+      if (epoch == _generation && detail == _detailGeneration) {
+        loadingDetails = false;
+        emit();
+      }
+    }
+  }
+
+  Future<void> createInvitation(String email) async {
+    final team = selectedTeam;
+    if (team == null) {
+      return;
+    }
+    final epoch = _generation;
+    createdInvite = null;
+    final ok = await run(() async {
+      final result = await gateway.createInvitation(team.id, email.trim());
+      if (epoch == _generation && selectedTeam?.id == team.id && !_disposed) {
+        createdInvite = result;
+      }
+    });
+    if (ok && epoch == _generation && selectedTeam?.id == team.id) {
+      await loadDetails();
+    }
+  }
+
+  Future<void> cancelInvitation(String id) async {
+    final epoch = _generation, teamId = selectedTeam?.id;
+    if (await run(
+      () => gateway.cancelInvitation(id),
+      success: 'Davet iptal edildi.',
+    )) {
+      if (epoch == _generation && selectedTeam?.id == teamId) {
+        if (createdInvite?.id == id) {
+          createdInvite = null;
+        }
+        await loadDetails();
+      }
+    }
+  }
+
+  Future<void> previewInvitation(String code) async {
+    invitePreview = null;
+    _previewCode = null;
+    final epoch = _generation, preview = ++_previewGeneration;
+    await run(() async {
+      final result = await gateway.previewInvitation(code.trim());
+      if (epoch == _generation && preview == _previewGeneration && !_disposed) {
+        invitePreview = result;
+        _previewCode = code.trim();
+      }
+    });
+  }
+
+  Future<void> acceptInvitation() async {
+    final code = _previewCode;
+    if (code == null || invitePreview == null) {
+      return;
+    }
+    final epoch = _generation;
+    if (await run(
+      () => gateway.acceptInvitation(code),
+      success: 'Ekibe çalışan olarak katıldınız.',
+    )) {
+      if (epoch == _generation) {
+        invitePreview = null;
+        _previewCode = null;
+        await loadTeams();
+      }
+    } else {
+      clearInvitationPreview();
     }
   }
 

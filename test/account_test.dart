@@ -68,6 +68,20 @@ class FakeAccountGateway implements AccountGateway {
   @override
   Future<void> renameTeam(String id, String name) async {}
   @override
+  Future<List<CloudMember>> members(String teamId) async => const [];
+  @override
+  Future<List<PendingInvite>> invitations(String teamId) async => const [];
+  @override
+  Future<CreatedInvite> createInvitation(String teamId, String email) async =>
+      CreatedInvite('invite', 'a' * 64, DateTime.utc(2030));
+  @override
+  Future<void> cancelInvitation(String id) async {}
+  @override
+  Future<InvitePreview> previewInvitation(String code) async =>
+      InvitePreview('team', 'Ekip', DateTime.utc(2030));
+  @override
+  Future<void> acceptInvitation(String code) async {}
+  @override
   void dispose() {
     unawaited(events.close());
   }

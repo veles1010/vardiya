@@ -110,15 +110,15 @@ Bu görevde canlı Supabase bağlantısı, SMTP teslimatı, SQL migration/pgTAP 
 
 ## Sonraki görev
 
-Gerçek ekip üyelerine çalışan daveti ve kabulü, ekip rolüne göre ekran erişimi, ortak vardiya/taslak/yayımlanmış snapshot tabloları ve bunların RLS kuralları bağlanacak. Bu tur gerçek ekipler Demo planına bağlanmaz; yerel vardiyalar yüklenmez. Cihazlar arası ortak vardiya paylaşımı, talepler, bildirimler ve dışa aktarma bu ayrı aşamaların devamıdır.
+Çalışan daveti ve kabulü aşağıdaki yeni migration ile eklendi. Sonraki görevde ortak vardiya/taslak/yayımlanmış snapshot tabloları ve bunların RLS kuralları bağlanacak. Bu tur gerçek ekipler Demo planına bağlanmaz; yerel vardiyalar yüklenmez. Cihazlar arası ortak vardiya paylaşımı, talepler, bildirimler ve dışa aktarma bu ayrı aşamaların devamıdır.
 
 ## GitHub Actions: izole PostgreSQL erişim testleri
 
 `.github/workflows/supabase-tests.yml`, standart `ubuntu-latest` runner üzerinde resmî `supabase/setup-cli@v3` ile CLI **2.121.0** kurar. Migration, SQL testleri, `supabase/config.toml` veya workflow değiştiğinde main push ve pull request olaylarında çalışır; Actions > Supabase tenant access tests > Run workflow ile elle de başlatılabilir. Yalnız `contents: read` izni kullanılır.
 
-Her çalışma temiz checkout ve runner'ın Docker ortamında geçici bir Supabase PostgreSQL örneği oluşturur. `supabase db start` ardından `supabase db reset --local --no-seed` ile depodaki migration'lar boş yerel test veritabanına uygulanır. `supabase test db --local supabase/tests/tenant_access.sql` gerçek PostgreSQL üzerinde iki yapay kullanıcı ve authenticated/anon rolleriyle testleri çalıştırır. Frankfurt projesine link/login/push yapılmaz; proje anahtarı, Supabase erişim tokenı veya gerçek DB parolası kullanılmaz. Test fixture'ı transaction sonunda rollback olur; geçici container/volume çalışma sonunda `supabase stop --no-backup` ile kaldırılır. Bu temizlik komutu yalnız CI runner'ın geçici verisi içindir.
+Her çalışma temiz checkout ve runner'ın Docker ortamında geçici bir Supabase PostgreSQL örneği oluşturur. `supabase db start` ardından `supabase db reset --local --no-seed` ile depodaki migration'lar boş yerel test veritabanına uygulanır. `supabase test db --local` gerçek PostgreSQL üzerinde eski erişim testleri ve yeni davet testlerini birlikte çalıştırır. Frankfurt projesine link/login/push yapılmaz; proje anahtarı, Supabase erişim tokenı veya gerçek DB parolası kullanılmaz. Test fixture'ı transaction sonunda rollback olur; geçici container/volume çalışma sonunda `supabase stop --no-backup` ile kaldırılır. Bu temizlik komutu yalnız CI runner'ın geçici verisi içindir.
 
-SQL hatası veya başarısız pgTAP assertion CLI çıkış koduyla işi başarısız kılar. Bash `pipefail` tee'nin hatayı gizlemesini engeller. Ayrıca sonuçta `Files=1, Tests=15` ve `Result: PASS` bulunması zorunludur; eksik/atlanmış testler başarılı sayılmaz. Sonuç, Actions adım loglarında ve başarılı çalışmanın özetinde görülür. Önceden uygulanmış migration dosyaları değiştirilmez; erişim düzeltmesi gerekirse yeni migration eklenir.
+SQL hatası veya başarısız pgTAP assertion CLI çıkış koduyla işi başarısız kılar. Bash `pipefail` tee'nin hatayı gizlemesini engeller. Ayrıca sonuçta `Files=2, Tests=48` ve `Result: PASS` bulunması zorunludur; eksik/atlanmış testler başarılı sayılmaz. Sonuç, Actions adım loglarında ve başarılı çalışmanın özetinde görülür. Önceden uygulanmış migration dosyaları değiştirilmez; erişim düzeltmesi gerekirse yeni migration eklenir.
 
 Aynı testi Docker + Supabase CLI 2.121.0 ile yalnız boş/atılabilir yerel test ortamında çalıştırmak için:
 
@@ -131,3 +131,37 @@ supabase test db --local supabase/tests/tenant_access.sql
 `db reset --local` o yerel Supabase veritabanını sıfırlar; mevcut geliştirme verilerinizi içeren bir yerel veritabanında kullanmayın. Uygulamanın yerel Demo deposu bu işlemlerden ayrıdır.
 
 İlk CI çalışması PostgreSQL üzerinde 8 assertion geçtikten sonra test dosyasındaki iki eksik psql değişken tırnağı nedeniyle durdu. Yalnız test sözdizimi düzeltildi; daha önce uygulanmış migration ve erişim kuralları değiştirilmedi. Tam 15 test tamamlanmadan workflow başarılı sayılmaz.
+
+
+## Çalışan davetleri — 23 Ekim 2026
+
+Yeni migration: `supabase/migrations/202610230002_employee_invitations.sql`. Önceki migration ve mevcut 15 assertion değiştirilmedi. Bu görevde Frankfurt/geliştirme projesine migration uygulanmadı. Geliştirme projesinde denemeden önce yeni migration'ı inceleyip önceki bölümdeki `supabase db push --dry-run` ve `supabase db push` adımlarını kendiniz uygulayın; bu işlem eski migration'ı yeniden yazmaz. Flutter'ı kendi yerel publishable yapılandırmanızla derleyin.
+
+### Kullanım
+
+- Gerçek hesabınızla giriş yapın, Ekiplerim listesinden ekibin ayrıntısını açın. Kendi rolünüz listede görünür. Tüm üyeler ekip e-postalarını ve rollerini görüntüleyebilir.
+- Sahip/yönetici, çalışanın e-postasını girip Davet oluştur seçer. **E-posta gönderilmez.** Oluşan kodu o anda kopyalayıp uygulama dışında kendiniz paylaşın. Ham kod ayrıntı kapatılınca, hesap değişince veya uygulama yenilenince geri getirilemez. Kaybolan kod için eski daveti iptal edip yeni davet oluşturun.
+- Sahip/yönetici yalnız hâlâ geçerli, tüketilmemiş davetleri listeler ve iptal edebilir. Listede kod veya hash dönmez. Kod kopyalandığında cihaz panosunda kalabilir; uygulama dışında paylaşımı kullanıcı yönetir.
+- Çalışan **hedef e-posta adresiyle doğrulanmış gerçek hesabına** girer. Ekibe katıl alanına kodu yazar, Daveti kontrol et ile ekip adını ve süreyi görür, ardından Daveti kabul et seçer. Önizleme tek başına üyelik oluşturmaz. Kabul sonrası ekip listesi yenilenir ve rol Çalışan olarak görünür.
+- Bu aşamada yönetici/sahip verme, üye çıkarma, rol değiştirme ve ortak vardiya verisi yoktur. Demo ayrı kalır; veriler otomatik yüklenmez.
+
+### Sunucu güvenliği
+
+`team_invitations` RLS açık, istemciye doğrudan SELECT/INSERT/UPDATE/DELETE kapalıdır. Kod `pgcrypto.gen_random_bytes(32)` ile 256 bit rastgele üretilir ve yalnız oluşturma RPC'sinin cevabında bir kez döner. Tabloda sadece SHA-256 hash saklanır. Süre sunucuda 7 gündür.
+
+`create_team_invitation` ve `cancel_team_invitation` o ekibin owner/manager üyeliğini doğrular. Liste RPC'si yalnız yöneticilere hedef e-posta, davet kimliği ve son kabul zamanını verir. Ham kodu yeniden sorgulayan endpoint yoktur. `preview_team_invitation` ve `accept_team_invitation`, `auth.uid()` ile gerçek `auth.users.email` ve `email_confirmed_at` alanlarını kontrol eder; JWT/istemciden e-posta, kullanıcı veya rol parametresi kabul etmez. E-posta eşleştirmesi trim ve küçük harf normalleştirmesiyle yapılır. Yanlış hedef, doğrulanmamış hesap, süre aşımı, iptal ve kullanım durumları detay sızdırmayan ortak yetki hatasıyla reddedilir.
+
+Kabul RPC'si davet satırını `FOR UPDATE` kilitler, yeniden geçerlilik kontrolü yapar, sabit `employee` rolüyle üyelik ekler ve aynı transaction'da tüketimi işaretler. Üyelik zaten varsa `ON CONFLICT DO NOTHING` ile korunur, geçerli davet yine tüketilir; mevcut yüksek rol değiştirilmez veya yeniden verilmez. Aynı kodun sonraki kabulü reddedilir. İptal de aynı satır kilidini kullanır. Özel helper fonksiyonları public/anon/authenticated çağrısına kapalıdır; dış RPC'ler yalnız authenticated rolüne açıktır. Üye listesi yalnız ekip üyelerine açılır. [Satır kilitleri](https://www.postgresql.org/docs/current/explicit-locking.html), [pgcrypto](https://www.postgresql.org/docs/current/pgcrypto.html).
+
+Hesap servisi, ekip/üyelik/bekleyen davet/önizleme ve yeni ham kodu sadece bellekte tutar. Çıkış ve hesap değişimi bunları temizler; eski hesaptan bekleyen yanıtlar atılır. UI kodu değiştirince eski önizleme geçersizleşir. Ham davet kodları, Auth oturumları ve gerçek kişisel bilgiler loglanmaz. Yeni RPC'ler hiçbir mesaj veya SMTP çağrısı yapmaz; hesap e-posta doğrulaması eskisi gibi korunur.
+
+### Doğrulama
+
+- `tenant_access.sql`: önceki **15** assertion aynen korundu.
+- `invitations.sql`: **33** assertion; owner/manager/employee yetkileri, ekip dışı erişim, hash, kod uzunluğu/farklılığı, 7 gün, hedef Auth e-postası, sahte JWT e-posta bilgisi, doğrulanmamış hesap, önizleme, iptal, süre aşımı, ikinci kullanım, mevcut üyelik ve rol yükseltme engeli.
+- Workflow **48/48 pgTAP assertion** ve iki test dosyası bekler; eksik/başarısız testte iş başarısız olur.
+- `tool/test_invite_concurrency.py`: runner'ın sabit `supabase_db_vardiya` container'ında iki ayrı psql oturumu aynı kodu eşzamanlı kabul eder. Tam bir başarı, bir SQL reddi, tek üyelik ve tek tüketim kontrol edilir. Kod ve SQL hata içerikleri basılmaz. Script uzak bağlantı adresi veya gerçek kimlik bilgisi almaz. Yalnız geçici CI veritabanında kullanılmalıdır.
+- İlk yeni migration çalışması [GitHub Actions'ta](https://github.com/veles1010/vardiya/actions/runs/39937318269) 48/48 assertion ve eşzamanlı kabul kontrolünden geçti. Bu gerçek PostgreSQL doğrulamasıdır; Frankfurt projesinde yeni migration'ın çalıştığı veya gerçek tarayıcı hesabıyla davetin kabul edildiği anlamına gelmez.
+- Flutter davet testleri fake adaptörle hesap izolasyonu, bekleyen yanıtların atılması, kodun önizleme sonrası değişmesi, kopyalama, iptal ve kabul akışını sınar. 320 px ekran ve açık klavye koşulu da test edilir.
+
+Gerçek ortamda kalanlar: yeni migration'ın sizin tarafınızdan geliştirme projesine uygulanması, iki doğrulanmış geliştirme hesabıyla tarayıcıda uçtan uca davet/kabul/iptal kontrolü ve Android/iOS cihaz kontrolü. Bu görevde bu adımlar, gerçek kişilere mesaj ve ortak vardiya bağlantısı yapılmadı.
