@@ -10,9 +10,15 @@ import 'data.dart';
 import 'domain.dart';
 import 'editors.dart';
 import 'widgets.dart';
+import 'theme.dart';
+import 'theme_browser.dart'
+    if (dart.library.js_interop) 'theme_browser_web.dart';
 
-void main() {
+import 'package:shared_preferences/shared_preferences.dart';
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final themeMode = await loadThemePreference();
   const config = CloudConfig();
   final account = AccountController(SupabaseAccountGateway(config));
   if (config.valid) {
@@ -23,15 +29,17 @@ void main() {
       store: ScheduleStore(LocalScheduleRepository()),
       account: account,
       config: config,
+      initialThemeMode: themeMode,
     ),
   );
 }
 
-class VardiyaApp extends StatelessWidget {
+class VardiyaApp extends StatefulWidget {
   const VardiyaApp({
     super.key,
     required this.store,
     this.initialized = false,
+    this.initialThemeMode = ThemeMode.dark,
     this.account,
     this.config = const CloudConfig(),
   });
@@ -39,6 +47,33 @@ class VardiyaApp extends StatelessWidget {
   final AccountController? account;
   final CloudConfig config;
   final bool initialized;
+  final ThemeMode initialThemeMode;
+  @override
+  State<VardiyaApp> createState() => _VardiyaAppState();
+}
+
+class _VardiyaAppState extends State<VardiyaApp> {
+  late ThemeMode mode = widget.initialThemeMode;
+  bool saveFailed = false;
+  Future<void> saving = Future.value();
+  void changeTheme(ThemeMode next) {
+    setState(() {
+      mode = next;
+      saveFailed = false;
+    });
+    saving = saving
+        .then(
+          (_) =>
+              SharedPreferencesAsync().setString(themePreferenceKey, next.name),
+        )
+        .then((_) {
+          if (mounted) setState(() => saveFailed = false);
+        })
+        .catchError((Object _) {
+          if (mounted) setState(() => saveFailed = true);
+        });
+  }
+
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Vardiya',
@@ -46,45 +81,39 @@ class VardiyaApp extends StatelessWidget {
     locale: const Locale('tr', 'TR'),
     supportedLocales: const [Locale('tr', 'TR')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
-    theme: ThemeData(
-      useMaterial3: true,
-      fontFamily: 'VardiyaSans',
-      textTheme: const TextTheme(
-        bodySmall: TextStyle(fontSize: 14, color: Color(0xff475563)),
-        bodyMedium: TextStyle(fontSize: 15, color: Color(0xff263746)),
-      ),
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xff176b5d),
-        primary: const Color(0xff176b5d),
-        surface: const Color(0xfff5f7f8),
-      ),
-      scaffoldBackgroundColor: const Color(0xfff5f7f8),
-      dialogTheme: const DialogThemeData(backgroundColor: Colors.white),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: const Color(0xffedf2f3),
-        labelStyle: const TextStyle(color: Color(0xff344b55), fontSize: 15),
-        helperStyle: const TextStyle(color: Color(0xff475563), fontSize: 14),
-        errorMaxLines: 4,
-        counterStyle: const TextStyle(fontSize: 13, color: Color(0xff475563)),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xffd8e1e3)),
+    theme: vardiyaTheme(Brightness.light),
+    darkTheme: vardiyaTheme(Brightness.dark),
+    themeMode: mode,
+    builder: (context, child) {
+      syncBrowserTheme(Theme.of(context).brightness == Brightness.dark);
+      return MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+        child: Overlay.wrap(
+          child: Column(
+            // Paint the persistent toolbar after Navigator's modal semantics barrier.
+            verticalDirection: VerticalDirection.up,
+            children: [
+              Expanded(child: child!),
+              ThemeToolbar(
+                mode: mode,
+                onChanged: changeTheme,
+                saveFailed: saveFailed,
+              ),
+            ],
+          ),
         ),
-      ),
-    ),
-    builder: (context, child) => MediaQuery(
-      data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-      child: child!,
-    ),
-    home: account == null
-        ? (initialized ? HomeScreen(store: store) : _Bootstrap(store: store))
+      );
+    },
+    home: widget.account == null
+        ? (widget.initialized
+              ? HomeScreen(store: widget.store)
+              : _Bootstrap(store: widget.store))
         : WorkspaceShell(
-            controller: account!,
-            config: config,
-            demo: initialized
-                ? HomeScreen(store: store)
-                : _Bootstrap(store: store),
+            controller: widget.account!,
+            config: widget.config,
+            demo: widget.initialized
+                ? HomeScreen(store: widget.store)
+                : _Bootstrap(store: widget.store),
           ),
   );
 }
@@ -115,9 +144,9 @@ class _BootstrapState extends State<_Bootstrap> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.storage_outlined, size: 40),
+                    Icon(Icons.storage_outlined, size: 40),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Yerel veriler açılamadı. Tarayıcı depolama iznini kontrol edin. Kayıtlı verilerinizin üzerine yazılmadı.',
                       textAlign: TextAlign.center,
                     ),
@@ -125,7 +154,7 @@ class _BootstrapState extends State<_Bootstrap> {
                     FilledButton(
                       onPressed: () =>
                           setState(() => loading = widget.store.initialize()),
-                      child: const Text('Tekrar dene'),
+                      child: Text('Tekrar dene'),
                     ),
                   ],
                 ),
@@ -296,7 +325,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   ?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -1),
             ),
             const SizedBox(height: 6),
-            Text(subtitle, style: const TextStyle(color: Color(0xff475563))),
+            Text(
+              subtitle,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
         ?action,
@@ -310,7 +344,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: const Color(0xff176b5d)),
+              Icon(icon, color: Theme.of(context).colorScheme.primary),
               const SizedBox(height: 14),
               Text(
                 value,
@@ -320,12 +354,15 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 6),
               Text(
                 label,
-                style: const TextStyle(color: Color(0xff475563), fontSize: 12),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 12,
+                ),
               ),
               if (hint != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
-                  child: Text(hint, style: const TextStyle(fontSize: 12)),
+                  child: Text(hint, style: TextStyle(fontSize: 12)),
                 ),
             ],
           ),
@@ -362,16 +399,23 @@ class _HomeScreenState extends State<HomeScreen> {
               horizontal: wide ? 32 : 16,
               vertical: 14,
             ),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(bottom: BorderSide(color: Color(0xffe2e7e9))),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerLow,
+              border: Border(
+                bottom: BorderSide(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
             ),
             child: Row(
               children: [
                 if (!wide) ...[
-                  const Icon(Icons.view_week_rounded, color: Color(0xff176b5d)),
+                  Icon(
+                    Icons.view_week_rounded,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                   const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'vardiya',
                       overflow: TextOverflow.ellipsis,
@@ -382,7 +426,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ] else
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Çalışma alanım',
                       style: TextStyle(fontWeight: FontWeight.w600),
@@ -394,14 +438,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xfffff0d8),
+                    color: Theme.of(context).colorScheme.tertiaryContainer,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
+                  child: Text(
                     'DEMO · Yerel',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Color(0xff8f5f17),
+                      color: Theme.of(context).colorScheme.onTertiaryContainer,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -421,13 +465,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Padding(
+                        Padding(
                           padding: EdgeInsets.only(bottom: 20),
                           child: Text(
                             'Demo modları aynı cihazdaki örnek verileri kullanır. Gerçek giriş veya yetkilendirme yoktur.',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Color(0xff475563),
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
                           ),
                         ),
@@ -438,11 +484,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         else
                           employeePage(),
                         const SizedBox(height: 32),
-                        const Text(
+                        Text(
                           'Planlanan net çalışma süresi gösterilir. Mola, vardiya boyunca orantılı dağıtılır.',
                           style: TextStyle(
                             fontSize: 11,
-                            color: Color(0xff52616f),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -461,20 +509,24 @@ class _HomeScreenState extends State<HomeScreen> {
           if (wide)
             Container(
               width: 216,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(right: BorderSide(color: Color(0xffe2e7e9))),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                border: Border(
+                  right: BorderSide(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.fromLTRB(24, 36, 20, 8),
                     child: Row(
                       children: [
                         Icon(
                           Icons.view_week_rounded,
-                          color: Color(0xff176b5d),
+                          color: Theme.of(context).colorScheme.primary,
                           size: 32,
                         ),
                         SizedBox(width: 10),
@@ -495,21 +547,24 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.fromLTRB(26, 0, 20, 40),
                     child: Text(
                       'Zamanın bir düzeni var.',
-                      style: TextStyle(fontSize: 12, color: Color(0xff52616f)),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(horizontal: 26, vertical: 8),
                     child: Text(
                       'DEMO GÖRÜNÜMÜ',
                       style: TextStyle(
                         fontSize: 10,
                         letterSpacing: 1.3,
-                        color: Color(0xff52616f),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ),
@@ -527,12 +582,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           selected: mode == i,
-                          selectedTileColor: const Color(0xffe4f1ec),
-                          selectedColor: const Color(0xff176b5d),
+                          selectedTileColor: Theme.of(context)
+                              .colorScheme
+                              .primaryContainer,
+                          selectedColor: Theme.of(context).colorScheme.primary,
                           leading: Icon(destinations[i].$2),
                           title: Text(
                             destinations[i].$1,
-                            style: const TextStyle(fontSize: 14),
+                            style: TextStyle(fontSize: 14),
                           ),
                           onTap: () => setState(() => mode = i),
                         ),
@@ -540,14 +597,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const Spacer(),
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.all(24),
                     child: Text(
                       'Yalnız bu cihazda\nWeb · Android · iOS',
                       style: TextStyle(
                         fontSize: 12,
                         height: 1.7,
-                        color: Color(0xff52616f),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ),
@@ -596,8 +653,8 @@ class _HomeScreenState extends State<HomeScreen> {
           action: FilledButton.icon(
             key: const Key('add-personal'),
             onPressed: () => editShift(),
-            icon: const Icon(Icons.add),
-            label: const Text('Kayıt ekle'),
+            icon: Icon(Icons.add),
+            label: Text('Kayıt ekle'),
           ),
         ),
         if (MediaQuery.sizeOf(context).width < 700) ...[
@@ -670,7 +727,9 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 6),
           Text(
             '${weekNames[selected.weekday - 1]} · ${entries.length} kayıt',
-            style: const TextStyle(color: Color(0xff52616f)),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 20),
           if (entries.isEmpty)
@@ -687,8 +746,8 @@ class _HomeScreenState extends State<HomeScreen> {
           if (editable)
             OutlinedButton.icon(
               onPressed: () => editShift(),
-              icon: const Icon(Icons.add),
-              label: const Text('Bu güne kayıt ekle'),
+              icon: Icon(Icons.add),
+              label: Text('Bu güne kayıt ekle'),
             ),
         ],
       ),
@@ -744,12 +803,12 @@ class _HomeScreenState extends State<HomeScreen> {
             IconButton(
               tooltip: 'Ekip adını düzenle',
               onPressed: () => editTeam(team),
-              icon: const Icon(Icons.edit_outlined),
+              icon: Icon(Icons.edit_outlined),
             ),
             OutlinedButton.icon(
               onPressed: () => editTeam(),
-              icon: const Icon(Icons.add),
-              label: const Text('Yeni ekip'),
+              icon: Icon(Icons.add),
+              label: Text('Yeni ekip'),
             ),
           ],
         ),
@@ -781,10 +840,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       changed
                           ? 'Taslak · Yayımlanmamış değişiklikler'
                           : 'Taslak ve yayımlanan plan aynı',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                      style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       'Çalışanlar yalnız son yayımlanan kopyayı görür.',
                       style: TextStyle(fontSize: 12),
                     ),
@@ -792,8 +851,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 FilledButton.icon(
                   onPressed: store.busy ? null : publish,
-                  icon: const Icon(Icons.publish_outlined),
-                  label: const Text('Tüm ekip taslağını yayımla'),
+                  icon: Icon(Icons.publish_outlined),
+                  label: Text('Tüm ekip taslağını yayımla'),
                 ),
               ],
             ),
@@ -809,15 +868,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: people.any((p) => p.active)
                     ? () => editShift(date: week)
                     : null,
-                icon: const Icon(Icons.add),
-                label: const Text('Vardiya ata'),
+                icon: Icon(Icons.add),
+                label: Text('Vardiya ata'),
               ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
             'Hafta · Planlanan net çalışma süresi: ${durationText(netTotal(shifts, week, week.add(const Duration(days: 7))))}',
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 16),
           if (people.isEmpty)
@@ -827,7 +886,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const EmptyState('Bu ekipte henüz çalışan yok.'),
                   FilledButton(
                     onPressed: () => editEmployee(),
-                    child: const Text('İlk çalışanı ekle'),
+                    child: Text('İlk çalışanı ekle'),
                   ),
                 ],
               ),
@@ -843,8 +902,8 @@ class _HomeScreenState extends State<HomeScreen> {
             alignment: Alignment.centerLeft,
             child: FilledButton.icon(
               onPressed: () => editEmployee(),
-              icon: const Icon(Icons.person_add_alt),
-              label: const Text('Çalışan ekle'),
+              icon: Icon(Icons.person_add_alt),
+              label: Text('Çalışan ekle'),
             ),
           ),
           const SizedBox(height: 16),
@@ -865,7 +924,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   trailing: IconButton(
                     tooltip: 'Çalışanı düzenle',
-                    icon: const Icon(Icons.edit_outlined),
+                    icon: Icon(Icons.edit_outlined),
                     onPressed: () => editEmployee(p),
                   ),
                 ),
@@ -873,7 +932,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ] else ...[
-          const Text(
+          Text(
             'Şablonlar tüm ekiplerde kullanılabilir. Değişiklikler mevcut atamaları değiştirmez.',
           ),
           const SizedBox(height: 12),
@@ -881,8 +940,8 @@ class _HomeScreenState extends State<HomeScreen> {
             alignment: Alignment.centerLeft,
             child: FilledButton.icon(
               onPressed: () => editTemplate(),
-              icon: const Icon(Icons.add),
-              label: const Text('Şablon ekle'),
+              icon: Icon(Icons.add),
+              label: Text('Şablon ekle'),
             ),
           ),
           const SizedBox(height: 16),
@@ -900,7 +959,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   trailing: IconButton(
                     tooltip: 'Şablonu düzenle',
                     onPressed: () => editTemplate(t),
-                    icon: const Icon(Icons.edit_outlined),
+                    icon: Icon(Icons.edit_outlined),
                   ),
                 ),
               ),
@@ -931,14 +990,18 @@ class _HomeScreenState extends State<HomeScreen> {
         defaultColumnWidth: const FixedColumnWidth(142),
         columnWidths: const {0: FixedColumnWidth(200)},
         border: TableBorder.symmetric(
-          inside: const BorderSide(color: Color(0xffe5eaec)),
+          inside: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
         ),
         defaultVerticalAlignment: TableCellVerticalAlignment.top,
         children: [
           TableRow(
-            decoration: const BoxDecoration(color: Color(0xffedf3f1)),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainer,
+            ),
             children: [
-              const Padding(
+              Padding(
                 padding: EdgeInsets.all(16),
                 child: Text(
                   'ÇALIŞAN / NET SÜRE',
@@ -951,7 +1014,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Text(
                     '${weekNames[i]}  ${d.day}',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                    style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                 );
               }),
@@ -967,13 +1030,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Text(
                         p.name,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+                        style: TextStyle(fontWeight: FontWeight.w700),
                       ),
                       Text(
                         p.active ? p.role : 'Pasif',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: Color(0xff52616f),
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -985,7 +1048,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             week.add(const Duration(days: 7)),
                           ),
                         ),
-                        style: const TextStyle(fontSize: 12),
+                        style: TextStyle(fontSize: 12),
                       ),
                     ],
                   ),
@@ -1007,7 +1070,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         if (entries.isEmpty && !p.active)
-                          const Padding(
+                          Padding(
                             padding: EdgeInsets.all(16),
                             child: Text('—'),
                           ),
@@ -1015,7 +1078,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           (s) => Padding(
                             padding: const EdgeInsets.only(bottom: 6),
                             child: Material(
-                              color: shiftColor(s).withValues(alpha: .1),
+                              color: shiftColor(
+                                context,
+                                s,
+                              ).withValues(alpha: .1),
                               borderRadius: BorderRadius.circular(10),
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(10),
@@ -1031,7 +1097,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           Icon(
                                             shiftIcon(s),
                                             size: 14,
-                                            color: shiftColor(s),
+                                            color: shiftColor(context, s),
                                           ),
                                           const SizedBox(width: 4),
                                           Expanded(
@@ -1039,7 +1105,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                               s.label,
                                               style: TextStyle(
                                                 fontWeight: FontWeight.w700,
-                                                color: shiftColor(s),
+                                                color: shiftColor(context, s),
                                                 fontSize: 12,
                                               ),
                                             ),
@@ -1051,12 +1117,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                         dayOf(s.start).isBefore(d)
                                             ? 'Devam → ${clockText(s.end)}'
                                             : shiftTime(s),
-                                        style: const TextStyle(fontSize: 11),
+                                        style: TextStyle(fontSize: 11),
                                       ),
                                       if (!dayOf(s.start).isBefore(d))
                                         Text(
                                           'Mola ${s.breakMinutes} dk',
-                                          style: const TextStyle(fontSize: 10),
+                                          style: TextStyle(fontSize: 10),
                                         ),
                                     ],
                                   ),
@@ -1069,7 +1135,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           IconButton(
                             tooltip: '${p.name}, ${dateText(d)} vardiya ekle',
                             onPressed: () => editShift(person: p.id, date: d),
-                            icon: const Icon(Icons.add, size: 18),
+                            icon: Icon(Icons.add, size: 18),
                             visualDensity: VisualDensity.compact,
                           ),
                       ],
@@ -1163,10 +1229,10 @@ class _HomeScreenState extends State<HomeScreen> {
             onChanged: (v) => setState(() => employeeId = v),
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'Yayımlanmış program · Bu seçim bir giriş işlemi değildir.',
             style: TextStyle(
-              color: Color(0xff176b5d),
+              color: Theme.of(context).colorScheme.primary,
               fontWeight: FontWeight.w600,
               fontSize: 12,
             ),
@@ -1178,7 +1244,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Bu hafta · Planlanan net çalışma süresi',
                   style: TextStyle(fontSize: 12),
                 ),
@@ -1210,14 +1276,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     Text(
                       '${weekNames[i]} · ${dateText(day)}',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                      style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 10),
                     if (entries.isEmpty)
-                      const Text(
+                      Text(
                         'Yayımlanmış vardiya yok',
                         style: TextStyle(
-                          color: Color(0xff52616f),
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 12,
                         ),
                       )

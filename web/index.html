@@ -17,6 +17,27 @@
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
+  <meta name="theme-color" content="#191e22">
+  <style>
+    html, body { margin: 0; background: #191e22; color-scheme: dark; }
+    html[data-theme="light"], html[data-theme="light"] body { background: #f5f7f8; color-scheme: light; }
+  </style>
+  <script>
+    // Match SharedPreferencesAsync's JSON string, reading only the appearance key.
+    // Keep the page dark until the preference is known, before Flutter draws.
+    (() => {
+      let preference = 'dark';
+      try { preference = JSON.parse(localStorage.getItem('vardiya.settings.theme.v1')) || 'dark'; } catch (_) {}
+      const system = matchMedia('(prefers-color-scheme: dark)');
+      const paint = () => {
+        const light = preference === 'light' || (preference === 'system' && !system.matches);
+        document.documentElement.dataset.theme = light ? 'light' : 'dark';
+        document.querySelector('meta[name="theme-color"]').content = light ? '#f5f7f8' : '#191e22';
+      };
+      paint();
+      system.addEventListener('change', paint);
+    })();
+  </script>
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="Kişisel ve ekip vardiya planlama · Yerel Demo">
 

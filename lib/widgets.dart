@@ -40,16 +40,20 @@ IconData shiftIcon(Shift s) => switch (s.kind) {
         ? Icons.nightlight_outlined
         : Icons.wb_sunny_outlined,
 };
-Color shiftColor(Shift s) => switch (s.kind) {
-  EntryKind.leave => const Color(0xff197b62),
-  EntryKind.rest => const Color(0xff687589),
-  EntryKind.work =>
-    s.start.hour >= 20 || s.start.hour < 6
-        ? const Color(0xff6c55a3)
-        : s.start.hour >= 12
-        ? const Color(0xffa15e20)
-        : const Color(0xff247e93),
-};
+Color shiftColor(BuildContext context, Shift s) {
+  final dark = Theme.of(context).brightness == Brightness.dark;
+  return switch (s.kind) {
+    EntryKind.leave => dark ? const Color(0xff80d7bc) : const Color(0xff197b62),
+    EntryKind.rest => dark ? const Color(0xffb9c6dc) : const Color(0xff687589),
+    EntryKind.work =>
+      s.start.hour >= 20 || s.start.hour < 6
+          ? (dark ? const Color(0xffc9b3f5) : const Color(0xff6c55a3))
+          : s.start.hour >= 12
+          ? (dark ? const Color(0xfff5c282) : const Color(0xffa15e20))
+          : (dark ? const Color(0xff85d5e5) : const Color(0xff247e93)),
+  };
+}
+
 String shiftTime(Shift s) => s.kind != EntryKind.work
     ? 'Tüm gün'
     : '${clockText(s.start)} – ${clockText(s.end)}${dayOf(s.end) != dayOf(s.start) ? ' (+1 gün)' : ''}';
@@ -69,9 +73,9 @@ class Surface extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: padding,
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
       borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: const Color(0xffccd7da)),
+      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
     ),
     child: Material(type: MaterialType.transparency, child: child),
   );
@@ -118,7 +122,7 @@ class ShiftTile extends StatelessWidget {
   final DateTime? day;
   @override
   Widget build(BuildContext context) {
-    final color = shiftColor(shift);
+    final color = shiftColor(context, shift);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Container(
@@ -140,7 +144,7 @@ class ShiftTile extends StatelessWidget {
                   if (employeeName != null)
                     Text(
                       employeeName!,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                      style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                   Text(
                     shift.label,
@@ -149,7 +153,7 @@ class ShiftTile extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     shiftTime(shift),
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   if (day != null && dayOf(shift.start).isBefore(dayOf(day!)))
                     Text(
@@ -203,15 +207,15 @@ class PeriodNav extends StatelessWidget {
       IconButton(
         tooltip: 'Önceki dönem',
         onPressed: previous,
-        icon: const Icon(Icons.chevron_left),
+        icon: Icon(Icons.chevron_left),
       ),
       Text(label, style: Theme.of(context).textTheme.titleMedium),
       IconButton(
         tooltip: 'Sonraki dönem',
         onPressed: next,
-        icon: const Icon(Icons.chevron_right),
+        icon: Icon(Icons.chevron_right),
       ),
-      TextButton(onPressed: today, child: const Text('Bugün')),
+      TextButton(onPressed: today, child: Text('Bugün')),
     ],
   );
 }
@@ -255,8 +259,8 @@ class MonthCalendar extends StatelessWidget {
                     child: Center(
                       child: Text(
                         d,
-                        style: const TextStyle(
-                          color: Color(0xff52616f),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 12,
                         ),
                       ),
@@ -292,10 +296,10 @@ class MonthCalendar extends StatelessWidget {
                   selected: active,
                   child: Material(
                     color: active
-                        ? const Color(0xff176b5d)
+                        ? Theme.of(context).colorScheme.primary
                         : day.month == month.month
-                        ? const Color(0xfff6f8f8)
-                        : Colors.white,
+                        ? Theme.of(context).colorScheme.surfaceContainer
+                        : Theme.of(context).colorScheme.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(10),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(10),
@@ -311,10 +315,12 @@ class MonthCalendar extends StatelessWidget {
                                   ? FontWeight.w800
                                   : FontWeight.w500,
                               color: active
-                                  ? Colors.white
+                                  ? Theme.of(context).colorScheme.onPrimary
                                   : day.month == month.month
-                                  ? const Color(0xff263746)
-                                  : const Color(0xffaab2b9),
+                                  ? Theme.of(context).colorScheme.onSurface
+                                  : Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
                             ),
                           ),
                           const SizedBox(height: 3),
@@ -332,8 +338,10 @@ class MonthCalendar extends StatelessWidget {
                                         shiftIcon(s),
                                         size: 10,
                                         color: active
-                                            ? Colors.white
-                                            : shiftColor(s),
+                                            ? Theme.of(context)
+                                                  .colorScheme
+                                                  .onPrimary
+                                            : shiftColor(context, s),
                                       ),
                                     ),
                                   )
@@ -350,7 +358,7 @@ class MonthCalendar extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          const Wrap(
+          Wrap(
             spacing: 14,
             runSpacing: 6,
             children: [

@@ -25,7 +25,7 @@ class _WorkspaceShellState extends State<WorkspaceShell> {
     builder: (context, _) => Column(
       children: [
         Material(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
           child: SafeArea(
             bottom: false,
             child: Padding(
@@ -191,7 +191,7 @@ class _AccountPageState extends State<AccountPage> {
         decoration: BoxDecoration(
           color: error
               ? Theme.of(context).colorScheme.errorContainer
-              : const Color(0xffe4f1ec),
+              : Theme.of(context).colorScheme.primaryContainer,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
@@ -199,7 +199,7 @@ class _AccountPageState extends State<AccountPage> {
           style: TextStyle(
             color: error
                 ? Theme.of(context).colorScheme.onErrorContainer
-                : const Color(0xff174c40),
+                : Theme.of(context).colorScheme.onPrimaryContainer,
           ),
         ),
       ),
