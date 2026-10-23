@@ -97,10 +97,10 @@ Testler; gece vardiyası, eşit saat, önceki günden çakışma, bitişte başl
 
 ## Bilinen sınırlamalar
 
-- Supabase hesap/ekip kodu kurulum gerektirir; canlı doğrulama henüz yapılmadı. Vardiya verisi hâlâ yereldir ve senkronize edilmez.
+- Gerçek hesap/ekip/davet akışı ve gerçek ortak plan Demo’dan ayrıdır. Yeni ortak plan migration’ı geliştirme projesine uygulanmadan gerçek plan kullanılamaz. Gerçek plan sunucudan girişte/Yenile ile alınır; çevrimdışı önbellek veya canlı abonelik yoktur.
 - Shared preferences küçük Demo verisi için seçilmiştir; kritik üretim verisinin tek kaynağı olarak uygun değildir. Şifreleme, yedekleme, veri kurtarma ve çok kullanıcılı işlem garantisi yoktur. Tarayıcı verilerini temizlemek veya uygulamayı kaldırmak veriyi silebilir; gizli gezinme kalıcı değildir.
 - Aynı origin'i birden çok sekmede eşzamanlı düzenlemek desteklenmez; son kayıt önceki değişiklikleri ezebilir. Demo tek etkin sekme/uygulama üzerinden denenmelidir.
-- Saat dilimi, yaz/kış saati ve ülkeye göre çalışma mevzuatı hesabı yoktur. Vardiya girişi aynı gün veya ertesi gün bitişle sınırlıdır.
+- Gerçek ekip saat dilimi Europe/Istanbul olarak sabittir. Saat dilimi değiştirme ve ülkeye göre çalışma mevzuatı hesabı yoktur. Demo formu aynı/ertesi gün; gerçek ekip formu açık başlangıç ve bitiş tarihi kullanır.
 - Ekip planında bu aşamada çalışma atamaları bulunur. İzin/dinlenme girişi kişisel takvimdedir; çalışan izin ve değişim talepleri sonraki aşamadadır.
 - Uygulama çevrimdışı depolama kullanır; web için yüklenebilir/offline PWA önbelleği henüz kurulmamıştır. Web sayfasını ilk açmak/yenilemek için yerel sunucu çalışıyor olmalıdır.
 - iOS proje dosyaları oluşturuldu. **Windows üzerinde iOS derlemesi veya testi yapılmadı.** Mac + Xcode üzerinde `flutter pub get`, `flutter build ios --simulator` ve `flutter run -d <ios-simülatör-kimliği>` çalıştırılmalı; eklenti bağlantısı, klavye/güvenli alan ve uygulamayı kapatıp açınca kalıcılık doğrulanmalıdır. Fiziksel iOS cihazı için imzalama ayrıca yapılandırılmalıdır.
@@ -108,9 +108,9 @@ Testler; gece vardiyası, eşit saat, önceki günden çakışma, bitişte başl
 
 ## Sonraki aşamalar
 
-1. Gerçek ekiplerin ortak vardiya verisine bağlanması (hesap/ekip ve e-posta hedefli davet kodu ile kabul akışı eklendi).
-2. Ortak vardiya verisi için sunucu tarafında ekip/rol yetkilendirmesi ve veri doğrulaması (mevcut ekip tablolarında RLS/RPC hazır).
-3. Cihazlar arası paylaşım, senkronizasyon ve eşzamanlı değişiklik çözümü.
+1. Gerçek ortak plan için geliştirme migration’ı ve iki hesaplı cihaz/tarayıcı kabul kontrolü (kurulum ve senaryo aşağıda).
+2. Üye/rol yaşam döngüsünün genişletilmesi.
+3. Canlı güncelleme ve çevrimdışı senkronizasyon (mevcut ortak plan sunucuda sürüm denetimiyle paylaşılır).
 4. İzin ve vardiya değişimi talepleri, yönetici onayı.
 5. Bildirimler ve hatırlatmalar.
 6. Dışa aktarma.
@@ -134,3 +134,12 @@ Bu düzeltmede 35 Flutter testi geçti; 320 px ekran ve 280 px klavye alanında 
 Gerçek hesap bölümünde ekip ayrıntısı, üyeler/roller, e-posta hedefli 7 günlük davet oluşturma/kopyalama/iptal ve kodla önizleme/kabul eklendi. Bu akış davet e-postası göndermez. Yeni migration, güvenlik modeli, CI ve geliştirme projesinde kalan kurulum adımları [Supabase rehberinde](docs/SUPABASE.md#çalışan-davetleri--23-ekim-2026). Eski 15 SQL assertion ile 33 yeni assertion ve ayrı eşzamanlı kabul testi geçici GitHub PostgreSQL ortamında geçti. Frankfurt projesine migration uygulanmadı; ortak vardiya eklenmedi.
 
 Bu aşamanın yerel kontrolleri: **47/47 Flutter testi**, format, analiz ve web release derlemesi başarılı. Flutter davet testleri fake adaptör kullanır; gerçek SQL/RLS kontrolleri ise yukarıda bağlantısı verilen geçici PostgreSQL Actions çalışmasında yapıldı.
+
+
+### Gerçek ekip ortak planı
+
+Gerçek hesabım → ekip ayrıntısı → **Haftalık planı aç**. Owner/manager gerçek üyelere (kendisi dahil) taslak vardiya atar, düzenler ve siler. **Yayımla · Tüm ekip taslağı** tüm tarihlerdeki programı tek transaction ile bağımsız yayımlanmış kopyaya geçirir. Employee yalnız kendi son yayımlanmış programını görür. Taslak değişiklikleri/silmeleri yeniden yayımlanana kadar çalışanı etkilemez. Masaüstünde ekip çizelgesi, telefonda gün seçimiyle günlük liste; haftalık planlanan net süre, tam tarih-saat, mola ve not vardır. Açılış ve Yenile sunucudan güncel veriyi alır. Eski sürümden yazım reddedilir ve Yenile istenir. Europe/Istanbul saatleri tarayıcının saat dilimine dönüştürülmez.
+
+Yeni migration: `supabase/migrations/202610230003_shared_team_plans.sql`. **Frankfurt’a uygulanmadı.** Önce yeni migration’ı inceleyip geliştirme projenize kendiniz uygulayın; mevcut publishable yapılandırmayla uygulamayı yeniden başlatın. Demo verileri korunur ve yüklenmez. Kurulum, sunucu güvenliği ve iki hesaplı kısa kabul senaryosu [Supabase rehberinde](docs/SUPABASE.md#gerçek-ekiplerin-ortak-vardiya-planı--23-ekim-2026).
+
+[GitHub Actions](https://github.com/veles1010/vardiya/actions/runs/39943841103) geçici gerçek PostgreSQL üzerinde **97/97 SQL assertion**, mevcut davet eşzamanlılığı ve üç ortak plan eşzamanlılık yarışını başarıyla tamamladı. Mevcut 48 assertion ve uygulanmış migration’lar korundu. Bu sonuç Frankfurt’ta yeni ortak planın doğrulandığı anlamına gelmez. Yerel Flutter sonuçları: **57/57 test** (47 mevcut + 10 ortak plan testi); 320 px/açık klavye, masaüstü çizelgesi, tam uygulama gezinmesi, hesap izolasyonu, hata/yenileme ve zaman hesapları kapsanır. Flutter testleri fake adaptör kullanır. Format ve statik analiz temiz; `flutter build web --release --no-web-resources-cdn` başarılı. Bu tur Android/iOS cihaz veya gerçek iki hesaplı ortak plan tarayıcı kabulü çalıştırılmadı; önceki davet iptalinin elle tarayıcı kontrolü de bekliyor.

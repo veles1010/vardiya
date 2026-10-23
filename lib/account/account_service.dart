@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import '../domain.dart';
+import 'plan_model.dart';
+
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -66,6 +69,15 @@ abstract interface class AccountGateway {
   Future<void> cancelInvitation(String id);
   Future<InvitePreview> previewInvitation(String code);
   Future<void> acceptInvitation(String code);
+  Future<CloudPlan> readPlan(String teamId, {required bool draft});
+  Future<void> saveShift(
+    String teamId,
+    int version,
+    Shift shift, {
+    required bool creating,
+  });
+  Future<void> deleteShift(String teamId, int version, String shiftId);
+  Future<void> publishPlan(String teamId, int version);
   void dispose();
 }
 
@@ -364,6 +376,58 @@ class SupabaseAccountGateway implements AccountGateway {
   }
 
   @override
+  Future<CloudPlan> readPlan(String teamId, {required bool draft}) async {
+    final data = await _client.rpc(
+      'read_team_plan',
+      params: {'target_team': teamId, 'draft': draft},
+    );
+    return CloudPlan.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  @override
+  Future<void> saveShift(
+    String teamId,
+    int version,
+    Shift shift, {
+    required bool creating,
+  }) async {
+    await _client.rpc(
+      'save_team_shift',
+      params: {
+        'target_team': teamId,
+        'expected_version': version,
+        'target_shift': creating ? null : shift.id,
+        'assigned_user': shift.employeeId,
+        'shift_start': planTime(shift.start),
+        'shift_end': planTime(shift.end),
+        'unpaid_break': shift.breakMinutes,
+        'shift_label': shift.label.trim(),
+        'shift_note': shift.note,
+      },
+    );
+  }
+
+  @override
+  Future<void> deleteShift(String teamId, int version, String shiftId) async {
+    await _client.rpc(
+      'delete_team_shift',
+      params: {
+        'target_team': teamId,
+        'expected_version': version,
+        'target_shift': shiftId,
+      },
+    );
+  }
+
+  @override
+  Future<void> publishPlan(String teamId, int version) async {
+    await _client.rpc(
+      'publish_team_plan',
+      params: {'target_team': teamId, 'expected_version': version},
+    );
+  }
+
+  @override
   void dispose() {
     unawaited(_auth?.cancel());
     unawaited(_links?.cancel());
@@ -387,10 +451,16 @@ String accountError(Object e) {
     };
   }
   if (e is PostgrestException) {
+    if (e.code == '40001') {
+      return 'Plan başka bir işlemle değişti. Yenile düğmesiyle güncel planı alın; değişikliğinizi yeniden yapın.';
+    }
+    if (e.code == '23P01') {
+      return 'Bu üyenin aynı saatte başka bir taslak vardiyası var. Tarih ve saatleri kontrol edin.';
+    }
     return e.code == '42501'
         ? 'İşlem yetkiniz yok veya davet geçersiz. Davetin hedef e-postasıyla doğrulanmış hesabı kullanın; davet süresi dolmuş, iptal edilmiş ya da kullanılmış olabilir.'
         : e.code == '22023'
-        ? 'Geçerli bir e-posta veya ekip adı girin.'
+        ? 'Geçerli alanlar girin. Bitiş başlangıçtan sonra, mola 0 ile toplam süre arasında olmalı; atanan kişi ekip üyesi olmalı.'
         : 'Ekip işlemi tamamlanamadı. Bağlantınızı ve veritabanı kurulumunu kontrol edin.';
   }
   return 'Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
@@ -407,11 +477,18 @@ class AccountController extends ChangeNotifier {
   CreatedInvite? createdInvite;
   InvitePreview? invitePreview;
   String? _previewCode;
+  CloudPlan? plan;
+  bool loadingPlan = false, planDraft = false, planStale = false;
+  int _planGeneration = 0;
   bool loadingDetails = false;
   int _detailGeneration = 0;
   int _previewGeneration = 0;
   void clearTeamDetails() {
     _detailGeneration++;
+    _planGeneration++;
+    plan = null;
+    loadingPlan = false;
+    planStale = false;
     selectedTeam = null;
     teamMembers = const [];
     pendingInvites = const [];
@@ -673,6 +750,68 @@ class AccountController extends ChangeNotifier {
       clearInvitationPreview();
     }
   }
+
+  Future<void> loadPlan({bool? draft}) async {
+    final team = selectedTeam;
+    if (team == null || user == null) return;
+    final epoch = _generation, request = ++_planGeneration;
+    planDraft = team.canManage && (draft ?? planDraft);
+    plan = null;
+    loadingPlan = true;
+    error = null;
+    emit();
+    try {
+      final result = await gateway
+          .readPlan(team.id, draft: planDraft)
+          .timeout(const Duration(seconds: 30));
+      if (epoch == _generation && request == _planGeneration && !_disposed) {
+        plan = result;
+        planStale = false;
+      }
+    } catch (e) {
+      if (epoch == _generation && request == _planGeneration) {
+        error = accountError(e);
+      }
+    } finally {
+      if (epoch == _generation && request == _planGeneration) {
+        loadingPlan = false;
+        emit();
+      }
+    }
+  }
+
+  Future<bool> changePlan(Future<void> Function(String, int) action) async {
+    final team = selectedTeam, snapshot = plan;
+    if (team == null ||
+        !team.canManage ||
+        snapshot == null ||
+        !planDraft ||
+        planStale) {
+      return false;
+    }
+    final epoch = _generation, request = _planGeneration;
+    final ok = await run(() => action(team.id, snapshot.version));
+    if (epoch != _generation || request != _planGeneration || _disposed) {
+      return false;
+    }
+    if (ok) {
+      await loadPlan();
+    } else {
+      // A timeout can also mean the transaction committed; require refresh before any retry.
+      planStale = true;
+      emit();
+    }
+    return ok;
+  }
+
+  Future<bool> savePlanShift(Shift shift, {required bool creating}) =>
+      changePlan(
+        (team, version) =>
+            gateway.saveShift(team, version, shift, creating: creating),
+      );
+  Future<bool> deletePlanShift(String id) =>
+      changePlan((team, version) => gateway.deleteShift(team, version, id));
+  Future<bool> publishPlan() => changePlan(gateway.publishPlan);
 
   @override
   void dispose() {

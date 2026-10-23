@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:vardiya/account/account_service.dart';
 import 'package:vardiya/main.dart';
+import 'package:vardiya/domain.dart';
+import 'package:vardiya/account/plan_model.dart';
 
 import 'support.dart';
 import 'widget_test.dart' show click, fill;
@@ -81,6 +83,20 @@ class FakeAccountGateway implements AccountGateway {
       InvitePreview('team', 'Ekip', DateTime.utc(2030));
   @override
   Future<void> acceptInvitation(String code) async {}
+  @override
+  Future<CloudPlan> readPlan(String teamId, {required bool draft}) async =>
+      const CloudPlan(version: 0, shifts: []);
+  @override
+  Future<void> saveShift(
+    String teamId,
+    int version,
+    Shift shift, {
+    required bool creating,
+  }) async {}
+  @override
+  Future<void> deleteShift(String teamId, int version, String shiftId) async {}
+  @override
+  Future<void> publishPlan(String teamId, int version) async {}
   @override
   void dispose() {
     unawaited(events.close());

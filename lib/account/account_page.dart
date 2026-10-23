@@ -337,7 +337,7 @@ class _AccountPageState extends State<AccountPage> {
                     InvitationPanel(key: ValueKey(c.user!.id), controller: c),
                     const SizedBox(height: 20),
                     const Text(
-                      'Ortak vardiya planı sonraki aşamada bağlanacak.',
+                      'Ekip ayrıntısından gerçek haftalık planı açabilirsiniz. Demo kayıtları ayrı tutulur.',
                     ),
                   ] else if (mode == 'verify' && !recovery) ...[
                     Text(

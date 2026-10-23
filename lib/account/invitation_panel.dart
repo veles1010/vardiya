@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'account_service.dart';
+import 'team_plan_page.dart';
 
 String roleLabel(String role) => switch (role) {
   'owner' => 'Sahip',
@@ -118,6 +119,17 @@ class _InvitationPanelState extends State<InvitationPanel> {
                 child: const Text('Ayrıntıyı kapat'),
               ),
             ],
+          ),
+          FilledButton.icon(
+            onPressed: c.loadingDetails || c.busy
+                ? null
+                : () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => TeamPlanPage(controller: c),
+                    ),
+                  ),
+            icon: const Icon(Icons.calendar_view_week),
+            label: const Text('Haftalık planı aç'),
           ),
           OutlinedButton.icon(
             onPressed: c.loadingDetails || c.busy ? null : c.loadDetails,

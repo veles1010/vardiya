@@ -110,7 +110,7 @@ Bu görevde canlı Supabase bağlantısı, SMTP teslimatı, SQL migration/pgTAP 
 
 ## Sonraki görev
 
-Çalışan daveti ve kabulü aşağıdaki yeni migration ile eklendi. Sonraki görevde ortak vardiya/taslak/yayımlanmış snapshot tabloları ve bunların RLS kuralları bağlanacak. Bu tur gerçek ekipler Demo planına bağlanmaz; yerel vardiyalar yüklenmez. Cihazlar arası ortak vardiya paylaşımı, talepler, bildirimler ve dışa aktarma bu ayrı aşamaların devamıdır.
+Çalışan daveti/kabulü ve gerçek ekiplerin ortak vardiya planı aşağıdaki ayrı migration’larla eklendi. Demo planı ayrı kalır; yerel kayıtlar yüklenmez. İzin/değişim talepleri, bildirimler ve dışa aktarma sonraki aşamalardır.
 
 ## GitHub Actions: izole PostgreSQL erişim testleri
 
@@ -118,14 +118,14 @@ Bu görevde canlı Supabase bağlantısı, SMTP teslimatı, SQL migration/pgTAP 
 
 Her çalışma temiz checkout ve runner'ın Docker ortamında geçici bir Supabase PostgreSQL örneği oluşturur. `supabase db start` ardından `supabase db reset --local --no-seed` ile depodaki migration'lar boş yerel test veritabanına uygulanır. `supabase test db --local` gerçek PostgreSQL üzerinde eski erişim testleri ve yeni davet testlerini birlikte çalıştırır. Frankfurt projesine link/login/push yapılmaz; proje anahtarı, Supabase erişim tokenı veya gerçek DB parolası kullanılmaz. Test fixture'ı transaction sonunda rollback olur; geçici container/volume çalışma sonunda `supabase stop --no-backup` ile kaldırılır. Bu temizlik komutu yalnız CI runner'ın geçici verisi içindir.
 
-SQL hatası veya başarısız pgTAP assertion CLI çıkış koduyla işi başarısız kılar. Bash `pipefail` tee'nin hatayı gizlemesini engeller. Ayrıca sonuçta `Files=2, Tests=48` ve `Result: PASS` bulunması zorunludur; eksik/atlanmış testler başarılı sayılmaz. Sonuç, Actions adım loglarında ve başarılı çalışmanın özetinde görülür. Önceden uygulanmış migration dosyaları değiştirilmez; erişim düzeltmesi gerekirse yeni migration eklenir.
+SQL hatası veya başarısız pgTAP assertion CLI çıkış koduyla işi başarısız kılar. Bash `pipefail` tee'nin hatayı gizlemesini engeller. Ayrıca sonuçta `Files=3, Tests=97` ve `Result: PASS` bulunması zorunludur; eksik/atlanmış testler başarılı sayılmaz. Sonuç, Actions adım loglarında ve başarılı çalışmanın özetinde görülür. Önceden uygulanmış migration dosyaları değiştirilmez; erişim düzeltmesi gerekirse yeni migration eklenir.
 
 Aynı testi Docker + Supabase CLI 2.121.0 ile yalnız boş/atılabilir yerel test ortamında çalıştırmak için:
 
 ```powershell
 supabase db start
 supabase db reset --local --no-seed
-supabase test db --local supabase/tests/tenant_access.sql
+supabase test db --local
 ```
 
 `db reset --local` o yerel Supabase veritabanını sıfırlar; mevcut geliştirme verilerinizi içeren bir yerel veritabanında kullanmayın. Uygulamanın yerel Demo deposu bu işlemlerden ayrıdır.
@@ -165,3 +165,46 @@ Hesap servisi, ekip/üyelik/bekleyen davet/önizleme ve yeni ham kodu sadece bel
 - Flutter davet testleri fake adaptörle hesap izolasyonu, bekleyen yanıtların atılması, kodun önizleme sonrası değişmesi, kopyalama, iptal ve kabul akışını sınar. 320 px ekran ve açık klavye koşulu da test edilir.
 
 Gerçek ortamda kalanlar: yeni migration'ın sizin tarafınızdan geliştirme projesine uygulanması, iki doğrulanmış geliştirme hesabıyla tarayıcıda uçtan uca davet/kabul/iptal kontrolü ve Android/iOS cihaz kontrolü. Bu görevde bu adımlar, gerçek kişilere mesaj ve ortak vardiya bağlantısı yapılmadı.
+
+
+## Gerçek ekiplerin ortak vardiya planı — 23 Ekim 2026
+
+Yeni migration: `supabase/migrations/202610230003_shared_team_plans.sql`. Önceki iki migration, mevcut 48 SQL assertion ve davet eşzamanlılık testi aynen korundu. **Bu görevde Frankfurt projesine migration uygulanmadı.** Gerçek hesap, davet kabulü ve yönetici üye listesi kullanıcı tarafından iki hesapla doğrulandı; yeni ortak plan için aşağıdaki kabul senaryosu henüz gerçek geliştirme ortamında çalıştırılmadı. Önceki davet iptalinin tarayıcı kabul kontrolü de bekliyor.
+
+### Kurulum ve kullanım
+
+Yeni migration’ı inceleyin. Geliştirme projesine kendi yetkinizle uygulamadan önce mevcut bağlantınızı ve bekleyen migration listesini kontrol edin (`supabase migration list`, `supabase db push --dry-run`); yalnız beklediğiniz migration’ın uygulanacağını doğruladıktan sonra `supabase db push` çalıştırın. Bu komutlar gerçek geliştirme veritabanında değişiklik yapar; bu görev sırasında çalıştırılmadılar. İstemciye yeni secret veya DB parolası gerekmez. Mevcut publishable yapılandırmayla Flutter’ı yeniden derleyin/başlatın. Yeni migration olmadan Demo çalışır; gerçek plan isteği anlaşılır kurulum/bağlantı hatası verir.
+
+Gerçek hesabım → Ekiplerim → ekip ayrıntısı → **Haftalık planı aç**. Owner/manager, tüm gerçek üyeler (kendisi dahil) için taslak atama oluşturur, düzenler, siler. Örnek çalışan/vardiya üretilmez. Başlangıç/bitiş ayrı tarih-saat olarak `YYYY-AA-GG SS:dd` biçiminde girilir; gece vardiyasında bitiş tarihini açıkça ertesi gün girin. İsim 1–100, not en fazla 2000 karakterdir. Form hesaplanan bitiş ve planlanan net süreyi gösterir. Masaüstünde üyeler satır, günler sütundur; hücreye basınca ayrıntı/düzenleme/silme açılır. Telefonda haftalık program ve gün seçimiyle günlük liste vardır.
+
+**Yayımla · Tüm ekip taslağı** yalnız görünen haftayı değil, ekibin tüm tarihlerdeki taslağını yayımlar. Onay açıklaması kapsamı belirtir. Yönetici Taslak/Yayımlanmış arasında geçebilir. Employee yalnız kendi yayımlanmış programını görür; kullanıcı/rol seçimi veya yönetim kontrolleri sunulmaz. Her ekran girişinde ve Yenile ile sunucudan veri alınır. Otomatik canlı abonelik veya çevrimdışı gerçek plan önbelleği yoktur. Demo’nun kalıcı yerel deposu ve davranışı korunur, sunucuya yüklenmez.
+
+### Model, zaman ve işlem güvenliği
+
+- `team_plans`: ekip sürümü, son yayımlanan sürüm/zamanı, sabit `Europe/Istanbul` saat dilimi. İlk boş plan sürümü 0’dır.
+- `team_shift_drafts`: UUID ile ilişkilendirilen ekip/üye atamaları. Ekip üyeliği bileşik foreign key ve RPC kontrolüyle doğrulanır. `btree_gist` exclusion constraint, aynı ekip/üye için `[başlangıç,bitiş)` kesişimini eşzamanlı işlemlerde de reddeder. Sınıra bitişik vardiyalar kabul edilir.
+- `team_shift_published`: ad, not, başlangıç, bitiş, mola ve üye kimliğinin bağımsız kopyası. Taslağa veya şablona canlı bağlanmaz. Taslağı değiştirmek/silmek eski yayını değiştirmez.
+- Üç tabloda RLS açık; public/anon/authenticated için doğrudan tablo okuma/yazma grant’i yoktur. Dış RPC’ler yalnız authenticated rolüne açık; private helper’lar istemciden çağrılamaz. `security definer` fonksiyonları boş search_path ve şema nitelikli nesneler kullanır, her işlemde gerçek `auth.uid()` üyeliğini/rolünü doğrular. Taslak okuma/yazma/yayımlama yalnız ekip owner/manager’ına açıktır. Yayımlanmış okuma employee için sunucuda `user_id=auth.uid()` ile sınırlıdır; başka kullanıcıyı seçen parametre yoktur. Yönetici kendi ekibinin yayımlanmış kopyasını görebilir. [Fonksiyon güvenliği](https://supabase.com/docs/guides/database/functions), [çakışma kısıtları](https://www.postgresql.org/docs/15/rangetypes.html#RANGETYPES-CONSTRAINT).
+- Bütün taslak yazımları ve yayımlama ekip durum satırını kilitler, zorunlu `expected_version` değerini karşılaştırır ve sürümü artırır. Eski veriden gelen işlem `40001` ile reddedilir. Yayımlama aynı transaction içinde eski kopyayı değiştirip sürüm/zamanı kaydeder. Okuma tek SQL snapshot’ında meta veriyi ve vardiyaları alır; yarım program görülmez. İstemci hatadan/zaman aşımından sonra yazmayı durdurur ve **Yenile** ister: zaman aşımında işlem sunucuda tamamlanmış olabilir.
+- Vardiya tarih-saatleri `timestamp without time zone` içinde **Europe/Istanbul sivil alanları**dır. API ofsetsiz ISO tarih-saat kullanır; Dart bunları UTC alanlarına sivil değer olarak taşır, `toLocal()` uygulamaz. PostgreSQL oturum/tarayıcı saat dilimi saatleri kaydırmaz. `published_at` denetim zamanı gerçek `timestamptz` değeridir. Gerçek planın “bu hafta” başlangıcı güncel İstanbul (UTC+03) tarihinden alınır. Ekip saat dilimini değiştirme bu sürümde yoktur.
+- Bitiş başlangıçtan sonra, değerler sonlu ve dakika hassasiyetinde olmalıdır. Eşit saatler yalnız açıkça sonraki tarihle 24 saat olabilir. Mola tamsayı, 0 ile brüt süre arasında olmalıdır. Aynı domain hesabı hafta/ay kesişimini alır, molayı brüt süreye orantılı dağıtır; sadece gösterilen toplam yuvarlanır. Örneğin 31 Ekim 22:00–1 Kasım 06:00, 60 dakika mola: ekim 105, kasım 315 dakika. Bordro/fazla mesai hesabı yapılmaz.
+- Hesap/ekip değişiminde ve çıkışta plan/üye/davet belleği temizlenir; eski bekleyen yanıtlar sürüm işaretleriyle atılır. Şifre, oturum, davet kodu ve kişisel bilgiler loglanmaz.
+
+### İki hesaplı kabul senaryosu (migration sonrası)
+
+1. Owner A ile gerçek ekibi açın; önceden katılmış employee B ve A için farklı vardiyalar girin. B’ye pazar 22:00–pazartesi 06:00, 60 dakika mola atayın. Aynı kişinin 05:59’da başlayan vardiyasının reddini, 06:00’da başlayan vardiyasının kabulünü kontrol edin.
+2. B’nin ayrı tarayıcı oturumunda planı açın: ilk yayımlama öncesi boş açıklama olmalı; taslaklar, A’nın vardiyaları ve yönetici kontrolleri görünmemeli.
+3. A ile Tüm ekip taslağı’nı yayımlayın; B ile Yenile yapın. B yalnız kendi vardiyalarını, not/mola ve ilgili haftaya düşen net toplamı görmeli. Farklı tarayıcı saat diliminde saatler aynı kalmalı.
+4. A taslak vardiyanın adını/saatini değiştirip sonra silsin. B Yenile yapsa da önceki yayımlanmış vardiya kalmalı. A yeniden yayımladığında silinmiş vardiya B’den kaldırılmalı. Başka haftalarda da değişikliğin yayımlandığını kontrol edin.
+5. A ile iki yönetici sekmesi açın; ikisi de aynı sürümü alsın. Birinde düzenleyip diğerinde yayımlamayı deneyin: eski sürüm reddedilmeli ve Yenile istenmeli. Yeni veriyi aldıktan sonra işlem yapılabilmeli.
+6. Ekip dışı üçüncü hesap ekip ID’sini bilse de RPC okuma/yazma yapamamalı. B hesabından doğrudan taslak okuma/yazma/yayımlama reddedilmeli. Çıkış/hesap değişiminde önceki plan görünmemeli. Demo kayıtları ve önceki davet akışı korunmalı.
+
+### Otomatik doğrulama
+
+- `tenant_access.sql` 15 + `invitations.sql` 33 + `shared_plans.sql` 49 = **97/97 pgTAP assertion**. Roller/ekip izolasyonu, employee filtresi, taslak gizliliği, bağımsız yayın, düzenleme/silme sonrası koruma, yeniden yayımlama, eski sürüm, gece/çakışma/bitişik aralık, eşit/geçersiz tarih-saat, mola, dönem payı ve saat dilimi kontrol edilir.
+- Aynı izole CI çalışmasında eski davet eşzamanlılık testi ve `tool/test_plan_concurrency.py` geçti. İki gerçek PostgreSQL oturumu çakışan ekleme, düzenleme/yayımlama ve çift yayımlamada yarıştırılır; her yarışta bir commit ve bir sürüm reddi, ardından tutarlı kopya doğrulanır.
+- [Başarılı izole PostgreSQL Actions çalışması](https://github.com/veles1010/vardiya/actions/runs/39943841103). CLI 2.121.0, Ubuntu ve geçici yerel veritabanı kullanıldı; Frankfurt bağlantısı/anahtarı gerekmedi. Workflow üç dosyada tam 97 assertion ve `Result: PASS` arar; iki eşzamanlılık script’inin hataları işi başarısız yapar.
+- Yerelde yalnız atılabilir Docker/Supabase veritabanında önceki `db start`, `db reset --local --no-seed`, `supabase test db --local` adımlarından sonra `python tool/test_invite_concurrency.py` ve `python tool/test_plan_concurrency.py` çalıştırılabilir. Script’ler yalnız sabit yerel container’a bağlanır. Bu Windows terminalinde CLI/Docker bulunmadığından SQL yerelde çalıştırılmadı; SQL doğrulaması yukarıdaki CI’dadır.
+- Flutter testleri fake adaptörle çalışır; gerçek Supabase uçtan uca kontrolünün yerine geçmez. Gerçek ortak planın iki hesaplı tarayıcı ve Android/iOS cihaz kabul kontrolleri migration sonrası yapılmalıdır. Windows’ta iOS derlemesi yapılmadı.
+
+Yerel son kontroller: **57/57 Flutter testi**, Dart format denetimi, `flutter analyze` ve `flutter build web --release --no-web-resources-cdn` başarılı. Gerçek uygulama gezinme testi, dar ekran/klavye, yayımlanmış çalışan programı, çakışma sonrası düzeltme, hesap geçişinde önbellek temizliği ve başarısız isteğin yenilenmesini kapsar.
