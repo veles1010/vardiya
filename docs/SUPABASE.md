@@ -129,3 +129,5 @@ supabase test db --local supabase/tests/tenant_access.sql
 ```
 
 `db reset --local` o yerel Supabase veritabanını sıfırlar; mevcut geliştirme verilerinizi içeren bir yerel veritabanında kullanmayın. Uygulamanın yerel Demo deposu bu işlemlerden ayrıdır.
+
+İlk CI çalışması PostgreSQL üzerinde 8 assertion geçtikten sonra test dosyasındaki iki eksik psql değişken tırnağı nedeniyle durdu. Yalnız test sözdizimi düzeltildi; daha önce uygulanmış migration ve erişim kuralları değiştirilmedi. Tam 15 test tamamlanmadan workflow başarılı sayılmaz.

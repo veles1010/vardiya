@@ -16,8 +16,8 @@ select is((select count(*) from public.teams),1::bigint,'invalid creation leaves
 set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-000000000002","role":"authenticated"}';
 select is((select count(*) from public.teams where id=:'team_a'),0::bigint,'B cannot read A by known id');
 select is((select count(*) from public.team_members where team_id=:'team_a'),0::bigint,'B cannot read A membership');
-select throws_ok(format('select public.rename_team(%L,''hacked'')', :'team_a),'42501',null,'B cannot rename A via RPC');
-select throws_ok(format('update public.teams set name=''hacked'' where id=%L', :'team_a),'42501',null,'B cannot directly write teams');
+select throws_ok(format('select public.rename_team(%L,''hacked'')', :'team_a'),'42501',null,'B cannot rename A via RPC');
+select throws_ok(format('update public.teams set name=''hacked'' where id=%L', :'team_a'),'42501',null,'B cannot directly write teams');
 select throws_ok(format('insert into public.team_members values(%L,%L,''owner'')', :'team_a','10000000-0000-0000-0000-000000000002'),'42501',null,'B cannot grant own membership');
 select public.create_team('B ekibi') as team_b \gset
 select is((select count(*) from public.teams),1::bigint,'B only sees B team');
