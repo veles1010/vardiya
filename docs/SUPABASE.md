@@ -118,7 +118,7 @@ Bu görevde canlı Supabase bağlantısı, SMTP teslimatı, SQL migration/pgTAP 
 
 Her çalışma temiz checkout ve runner'ın Docker ortamında geçici bir Supabase PostgreSQL örneği oluşturur. `supabase db start` ardından `supabase db reset --local --no-seed` ile depodaki migration'lar boş yerel test veritabanına uygulanır. `supabase test db --local` gerçek PostgreSQL üzerinde eski erişim testleri ve yeni davet testlerini birlikte çalıştırır. Frankfurt projesine link/login/push yapılmaz; proje anahtarı, Supabase erişim tokenı veya gerçek DB parolası kullanılmaz. Test fixture'ı transaction sonunda rollback olur; geçici container/volume çalışma sonunda `supabase stop --no-backup` ile kaldırılır. Bu temizlik komutu yalnız CI runner'ın geçici verisi içindir.
 
-SQL hatası veya başarısız pgTAP assertion CLI çıkış koduyla işi başarısız kılar. Bash `pipefail` tee'nin hatayı gizlemesini engeller. Ayrıca sonuçta `Files=3, Tests=97` ve `Result: PASS` bulunması zorunludur; eksik/atlanmış testler başarılı sayılmaz. Sonuç, Actions adım loglarında ve başarılı çalışmanın özetinde görülür. Önceden uygulanmış migration dosyaları değiştirilmez; erişim düzeltmesi gerekirse yeni migration eklenir.
+SQL hatası veya başarısız pgTAP assertion CLI çıkış koduyla işi başarısız kılar. Bash `pipefail` tee'nin hatayı gizlemesini engeller. Ayrıca sonuçta `Files=4, Tests=168` ve `Result: PASS` bulunması zorunludur; eksik/atlanmış testler başarılı sayılmaz. Sonuç, Actions adım loglarında ve başarılı çalışmanın özetinde görülür. Önceden uygulanmış migration dosyaları değiştirilmez; erişim düzeltmesi gerekirse yeni migration eklenir.
 
 Aynı testi Docker + Supabase CLI 2.121.0 ile yalnız boş/atılabilir yerel test ortamında çalıştırmak için:
 
@@ -208,3 +208,45 @@ Gerçek hesabım → Ekiplerim → ekip ayrıntısı → **Haftalık planı aç*
 - Flutter testleri fake adaptörle çalışır; gerçek Supabase uçtan uca kontrolünün yerine geçmez. Gerçek ortak planın iki hesaplı tarayıcı ve Android/iOS cihaz kabul kontrolleri migration sonrası yapılmalıdır. Windows’ta iOS derlemesi yapılmadı.
 
 Yerel son kontroller: **57/57 Flutter testi**, Dart format denetimi, `flutter analyze` ve `flutter build web --release --no-web-resources-cdn` başarılı. Gerçek uygulama gezinme testi, dar ekran/klavye, yayımlanmış çalışan programı, çakışma sonrası düzeltme, hesap geçişinde önbellek temizliği ve başarısız isteğin yenilenmesini kapsar.
+
+
+## Tam gün izin talepleri ve yönetici onayı
+
+Önceki ortak planın **beş manuel kabul testi kullanıcı tarafından başarıyla tamamlandı**. Gerçek hesap/ekip/davet/ortak plan ve açık/koyu tema davranışı korunur. Bu yeni izin akışının gerçek geliştirme ortamındaki kabul testi ise henüz yapılmadı.
+
+Yeni migration: `supabase/migrations/202610230004_team_leave_requests.sql`. Önceki migration dosyaları değiştirilmedi. **Bu görevde Frankfurt’a migration uygulanmadı.** Yeni dosyayı inceleyip kendi geliştirme bağlantınızda önce `supabase migration list` ve `supabase db push --dry-run` ile yalnız beklediğiniz migration’ın beklediğini kontrol edin; ardından kendi yetkinizle `supabase db push` uygulayın. Mevcut publishable yapılandırmayla Flutter’ı yeniden derleyin/başlatın. Yeni migration olmadan eski gerçek ortak plan, eksik `leaves` alanını boş liste kabul ederek çalışır; yeni izin ekranı kurulmamış RPC için bağlantı/kurulum hatası gösterir. Yerel Demo kayıtları yüklenmez veya değiştirilmez.
+
+### Kullanım
+
+Gerçek hesabım → ekip ayrıntısı → **İzin talepleri**. Employee yalnız kendi taleplerini listeler ve **İzin talep et** ile başlangıç/bitiş gününü takvimden seçer (elle tarih girişi yoktur). Her iki gün dahildir, aynı gün de seçilebilir. Açıklama isteğe bağlıdır ve en fazla 500 karakterdir. İlk durum **Bekliyor**; çalışan sadece bekleyen talebini geri çekebilir. Bekleyen başvuru çizelgede onaylı izin olarak gösterilmez. Onaylandı, Reddedildi ve İptal edildi kayıtları silinmeden listede kalır.
+
+Owner/manager kendi ekibinin taleplerini görür. Bekleyen talebi onaylar veya gerekçeyle reddeder; onaylı izni gerekçeyle iptal eder. Ret/iptal gerekçesi boş olamaz ve en fazla 500 karakterdir. İşlem geçmişinde aktör kimliği (mevcut üye listesinde varsa e-postası), sunucu karar zamanı ve gerekçe gösterilir. Yönetici kendi eski talebine karar veremez. Ekrana giriş ve **Yenile** güncel veriyi sunucudan alır; hata/eski sürümden sonra Yenile gerekir.
+
+Onaylı izinler haftalık çizelgede **İzinli** olarak yer alır; mobil programda kapsadığı günlere göre süzülür. Çalışma toplamı yalnız vardiyalardan hesaplanır. Onaylı izin durumu vardiya taslağından/yayımlanmış kopyadan ayrıdır: izin onayı veya iptali, sonraki sunucu yenilemesinde doğrudan görünür; izin onayı için ek bir vardiya yayını gerekmez. Çalışanın programına yalnız kendi onaylı günleri gider; açıklama veya işlem geçmişi plan payload’ına eklenmez.
+
+### Tutarlılık ve erişim
+
+- `team_leave_requests` ve `team_leave_events` tablolarında RLS açık, istemciye doğrudan okuma/yazma grant’i kapalıdır. Okuma, oluşturma ve durum geçişleri yalnız authenticated RPC’lerden geçer. Üyelik/rol gerçek `auth.uid()` ile denetlenir; oluşturma RPC’si kullanıcı/rol/durum parametresi almaz ve yalnız ilgili ekibin employee üyesi adına `pending` oluşturur. Employee’nin talep/açıklama/geçmiş sorgusu sunucuda kendi kimliğiyle sınırlıdır. Takım dışı erişim, başka kişinin talebini çekme ve istemciden onay/rol yazımı reddedilir.
+- Başlangıç/bitiş `date`, tam gün aralığı Europe/Istanbul sivil sınırlarıdır: `[başlangıç 00:00, bitiş+1 gün 00:00)`. `daterange(...,'[]')` exclusion constraint aynı ekip/kişinin bekleyen veya onaylı taleplerinin kesişmesini engeller. Ret/iptal yeni başvuruyu engellemez. Önceki geceden taşan vardiya kontrol edilir; bitiş gününü izleyen 00:00’da başlayan vardiya çakışmaz. [PostgreSQL aralık kısıtları](https://www.postgresql.org/docs/15/rangetypes.html#RANGETYPES-CONSTRAINT).
+- Talep oluşturma mevcut vardiya ile çakışabilir. Yönetici liste RPC’si hem taslak hem yayımlanmış çakışmaları kaynak, ad ve tam tarih-saat ile verir; bu bilgi employee’ye açılmaz. Onay RPC’si bunları tekrar kontrol eder. Taslaktan silmek tek başına yeterli değildir: yayımlanmış eski vardiya da giderilene kadar onay engellenir. Otomatik vardiya silme/değiştirme yapılmaz.
+- İzin işlemleri, vardiya kaydı/silme/yayımlama ile **aynı `team_plans` satırını aynı sırayla kilitler**, zorunlu ekip sürümünü kontrol eder ve sürümü artırır. Böylece çalışan başvurusu da eski yönetici ekranını geçersiz kılabilir. Kararlar ayrıca talep `revision` ve geçiş durumunu doğrular; çift karar/tekrar onay reddedilir. Önce ekip, sonra talep kilitlenir. [Satır kilitleri](https://www.postgresql.org/docs/17/explicit-locking.html).
+- Yeni taslak ve yayımlanmış vardiya satırlarında trigger, aynı kilit altında onaylı izin kesişimini reddeder. Mevcut vardiya RPC’lerinin sürüm denetimi ve atomik yayımlama davranışı korunur. Onay ile vardiya/yayım yarışında eski işlem reddedilir; tutarsız onaylı izin + vardiya durumu oluşmaz. İzin iptali vardiyaları geri oluşturmaz.
+- Her geçiş sunucu aktör/zaman/gerekçesiyle ayrı bir event ekler; onaylı izin iptalinde ilk onay olayı korunur. İstemci silme endpoint’i yoktur. Hesap/ekip değişiminde ve çıkışta talepler temizlenir; eski bekleyen yanıtlar atılır. Başarılı izin yazımı plan önbelleğini de geçersiz kılar. Açıklamalar, gerekçeler, şifreler ve oturumlar loglanmaz.
+
+### Kısa iki hesaplı kabul senaryosu (migration sonrası)
+
+1. Doğrulanmış employee B kendi ekibini açsın. İzin talepleri → İzin talep et ile iki gün seçip kısa açıklamayla göndersin. Bekliyor görünmeli; haftalık programda henüz İzinli olmamalı. Aynı aralıkta ikinci talep reddedilmeli; aynı gün seçimi bir tam gün olmalı.
+2. Owner/manager A aynı ekibin talebini görsün. Çakışmayan talebi onaylasın. B Yenile yaptığında Onaylandı ve programında İzinli görmeli; net çalışma süresi artmamalı. B başka çalışanın talebini/açıklamasını görememeli.
+3. B mevcut vardiya günü için başka talep oluştursun; A çakışan **Taslak/Yayımlanmış** vardiya ad/saatlerini görsün. Önceki geceden taşan vardiya da listelenmeli. Sadece taslağı silmek onay için yeterli olmamalı. Planı düzenleyip yeniden yayımladıktan ve talepleri yeniledikten sonra A onaylayabilmeli.
+4. A onaylı izin gününe vardiya kaydetmeyi denesin: reddedilmeli. İznin son gününü izleyen 00:00’da başlayan vardiya kabul edilmeli. İki yönetici sekmesinde eski sürümden onay/kayıt/yayım denemesi Yenile istemeli.
+5. B bekleyen talebini geri çeksin; İptal edildi olarak kalmalı. A başka bekleyen talebi boş gerekçeyle reddedememeli; gerekçeyle reddettiğinde B nedeni görmeli. A onaylı izni gerekçeyle iptal etsin; B’nin takviminden kalkmalı, işlem geçmişinde hem ilk onay hem iptal aktörü/zamanı kalmalı. Ret/iptal sonrası aynı günler için yeni başvuru yapılabilmeli.
+
+### Doğrulama ve kalanlar
+
+[Başarılı GitHub Actions çalışması](https://github.com/veles1010/vardiya/actions/runs/39959977345): eski **97** + `supabase/tests/leave_requests.sql` içindeki **71** = **168/168 pgTAP assertion** gerçek, izole PostgreSQL’de geçti. Workflow dört dosyada tam bu sayıyı ve `Result: PASS` arar. CLI 2.121.0 ve standart Ubuntu runner kullanılır; Frankfurt bağlantısı veya gerçek proje sırları gerekmez. Mevcut davet/ortak plan eşzamanlılık script’leri değişmeden geçti. Yeni `tool/test_leave_concurrency.py`, ayrı gerçek PostgreSQL oturumlarıyla onay/kayıt, onay/yayımlama, iptal/kayıt, çift karar ve çakışan başvuruyu yarıştırır; geçerli tek sonuç, tutarlı vardiya/izin durumu ve tek karar olayı doğrulanır.
+
+Yalnız atılabilir yerel Docker/Supabase ortamında mevcut `supabase db start`, `supabase db reset --local --no-seed`, `supabase test db --local` komutlarından sonra üç `tool/test_*concurrency.py` script’ini çalıştırın. `db reset --local` o yerel test DB’sini siler; gerçek geliştirme verisi bulunan DB’de kullanmayın. Bu Windows terminalinde CLI/Docker yoktu, SQL doğrulaması yukarıdaki CI’da yapıldı.
+
+Flutter: **67/67 test** (57 mevcut + 10 izin testi), format denetimi, `flutter analyze` ve `flutter build web --release --no-web-resources-cdn` başarılı. Yeni testler fake adaptörle tarih seçici, iki ucu dahil günler, employee geri çekme, onay, gerekçeli ret/iptal, hesap/ekip izolasyonu, eski sürüm, çakışma kaynağı, 320 px/açık klavye, iki tema ve sıfır çalışma toplamlı takvim/çizelgeyi sınar. Fake Flutter testleri gerçek Supabase uçtan uca testi değildir.
+
+Gerçek ortamda kalanlar: yeni migration’ın sizin tarafınızdan geliştirme projesine uygulanması, yukarıdaki iki hesaplı izin kabul senaryosu ve Android/iOS cihaz kontrolleri. Bu görevde Frankfurt’a migration, gerçek kişilere mesaj veya cihaz testi yapılmadı. Windows’ta iOS derlemesi yapılmadı. İzin hakkı/bakiye, bordro/yasal hak, vardiya takası, bildirim ve ödeme bu kapsamda yoktur.

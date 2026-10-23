@@ -101,7 +101,7 @@ Testler; gece vardiyası, eşit saat, önceki günden çakışma, bitişte başl
 - Shared preferences küçük Demo verisi için seçilmiştir; kritik üretim verisinin tek kaynağı olarak uygun değildir. Şifreleme, yedekleme, veri kurtarma ve çok kullanıcılı işlem garantisi yoktur. Tarayıcı verilerini temizlemek veya uygulamayı kaldırmak veriyi silebilir; gizli gezinme kalıcı değildir.
 - Aynı origin'i birden çok sekmede eşzamanlı düzenlemek desteklenmez; son kayıt önceki değişiklikleri ezebilir. Demo tek etkin sekme/uygulama üzerinden denenmelidir.
 - Gerçek ekip saat dilimi Europe/Istanbul olarak sabittir. Saat dilimi değiştirme ve ülkeye göre çalışma mevzuatı hesabı yoktur. Demo formu aynı/ertesi gün; gerçek ekip formu açık başlangıç ve bitiş tarihi kullanır.
-- Ekip planında bu aşamada çalışma atamaları bulunur. İzin/dinlenme girişi kişisel takvimdedir; çalışan izin ve değişim talepleri sonraki aşamadadır.
+- Demo kişisel takviminde izin/dinlenme kaydı bulunur; gerçek ekipte tam gün izin talebi ve yönetici kararı ayrı akıştadır. Vardiya değişimi talepleri henüz eklenmedi.
 - Uygulama çevrimdışı depolama kullanır; web için yüklenebilir/offline PWA önbelleği henüz kurulmamıştır. Web sayfasını ilk açmak/yenilemek için yerel sunucu çalışıyor olmalıdır.
 - iOS proje dosyaları oluşturuldu. **Windows üzerinde iOS derlemesi veya testi yapılmadı.** Mac + Xcode üzerinde `flutter pub get`, `flutter build ios --simulator` ve `flutter run -d <ios-simülatör-kimliği>` çalıştırılmalı; eklenti bağlantısı, klavye/güvenli alan ve uygulamayı kapatıp açınca kalıcılık doğrulanmalıdır. Fiziksel iOS cihazı için imzalama ayrıca yapılandırılmalıdır.
 - Android debug APK üretmek, Android cihaz testi yapıldığı anlamına gelmez. Cihaz üzerinde klavye, süreç kapatma/yeniden açma ve depolama davranışı ayrıca kontrol edilmelidir.
@@ -111,7 +111,7 @@ Testler; gece vardiyası, eşit saat, önceki günden çakışma, bitişte başl
 1. Gerçek ortak plan için geliştirme migration’ı ve iki hesaplı cihaz/tarayıcı kabul kontrolü (kurulum ve senaryo aşağıda).
 2. Üye/rol yaşam döngüsünün genişletilmesi.
 3. Canlı güncelleme ve çevrimdışı senkronizasyon (mevcut ortak plan sunucuda sürüm denetimiyle paylaşılır).
-4. İzin ve vardiya değişimi talepleri, yönetici onayı.
+4. Vardiya değişimi talepleri ve yönetici onayı (tam gün izin talebi/onayı eklendi).
 5. Bildirimler ve hatırlatmalar.
 6. Dışa aktarma.
 
@@ -154,3 +154,14 @@ Tercih mevcut SharedPreferencesAsync altyapısıyla ayrı `vardiya.settings.them
 Bu görünüm değişikliğinde yeni bağımlılık veya tekrar eden yeni test eklenmedi. Mevcut **57/57 Flutter testi**, format, analiz ve web release derlemesi başarılı. Gerçek tarayıcıda açık/koyu geçişi ve her iki tercihin yenileme sonrası korunması, açık formdaki notun tema değişiminde kalması, koyu ana ekran ve Demo haftalık çizelgesi görsel olarak kontrol edildi. 1280×900 masaüstü ve 320×800 dar ekran/form incelendi; deneme formları kaydedilmedi. Gerçek hesap bölümü giriş ekranındaydı: oturum gerektiren ekip/üye/davet/gerçek plan ekranlarının yeni temayla manuel kontrolü, çıkış sonrası tercih kontrolü, işletim sistemi temasını çalışma sırasında değiştirme ve Android/iOS cihaz kontrolü bu tur yapılmadı. Bu ekranlar merkezi temayı kullanır; iş mantığı ve sunucu erişim kuralları değiştirilmedi.
 
 Yerel önizleme yeni `build/web` çıktısıyla `http://127.0.0.1:7357/` adresinde güncellendi; tarayıcıda **Ctrl+F5** ile yenileyin. Sonraki değişikliklerde mevcut yapılandırmayla yeniden web derlemesi üretip sayfayı yenileyin. `config/supabase.local.json` ve derleme çıktıları Git’e dahil edilmez.
+
+
+### Gerçek ekiplerde tam gün izin
+
+Önceki ortak planın **beş manuel kabul testi kullanıcı tarafından başarıyla tamamlandı**. Yeni izin akışı Gerçek hesabım → ekip ayrıntısı → **İzin talepleri** bölümündedir. Employee başlangıç/bitiş gününü takvimden seçer (iki uç dahil), isteğe bağlı en fazla 500 karakter açıklamayla talep oluşturur, yalnız kendi taleplerini görür ve bekleyeni geri çeker. Owner/manager onaylar, gerekçeyle reddeder veya onaylı izni gerekçeyle iptal eder; aktör/zaman/gerekçe geçmişi silinmez.
+
+Bekleyen talepler onaylı izin olarak gösterilmez. Onaylı günler haftalık programda **İzinli** görünür ve çalışma toplamına eklenmez. Talep mevcut vardiyayla çakışabilir; onay hem taslak hem yayımlanmış vardiyaya karşı sunucuda engellenir. Planı düzeltip yeniden yayımlamak gerekir. Onaylı günlere vardiya kaydı/yayımı da sunucuda engellenir. Tüm izin ve plan işlemleri aynı ekip kilidi/sürümünü kullanır; eski veriden işlem Yenile ister. Demo ve tema tercihleri ayrı kalır.
+
+Yeni migration: `supabase/migrations/202610230004_team_leave_requests.sql`. **Frankfurt’a uygulanmadı.** Kurulum ve kısa iki hesaplı kabul senaryosu [Supabase rehberinde](docs/SUPABASE.md#tam-gün-izin-talepleri-ve-yönetici-onayı). Geliştirme projesine kendi yetkinizle uygulayıp yeni istemciyi derledikten sonra gerçek izin kabul kontrolünü yapın.
+
+[İzole PostgreSQL Actions](https://github.com/veles1010/vardiya/actions/runs/39959977345): **168/168 SQL assertion**, mevcut davet/plan yarışları ve beş yeni izin eşzamanlılık yarışı geçti. Flutter’da **67/67 test** (57 mevcut + 10 yeni), format, analiz ve web release derlemesi geçti; yeni Flutter testleri fake adaptör kullanır. Gerçek geliştirme hesabıyla yeni izin akışı ve Android/iOS cihaz kontrolü bu tur yapılmadı. İzin bakiyesi, bordro/yasal hak hesabı, takas, bildirim ve ödeme eklenmedi.

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'account_service.dart';
 import 'team_plan_page.dart';
+import 'team_leave_page.dart';
 
 String roleLabel(String role) => switch (role) {
   'owner' => 'Sahip',
@@ -130,6 +131,17 @@ class _InvitationPanelState extends State<InvitationPanel> {
                   ),
             icon: const Icon(Icons.calendar_view_week),
             label: const Text('Haftalık planı aç'),
+          ),
+          OutlinedButton.icon(
+            onPressed: c.loadingDetails || c.busy
+                ? null
+                : () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => TeamLeavePage(controller: c),
+                    ),
+                  ),
+            icon: const Icon(Icons.beach_access_outlined),
+            label: const Text('İzin talepleri'),
           ),
           OutlinedButton.icon(
             onPressed: c.loadingDetails || c.busy ? null : c.loadDetails,

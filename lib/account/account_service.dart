@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../domain.dart';
 import 'plan_model.dart';
+import 'leave_model.dart';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
@@ -78,6 +79,22 @@ abstract interface class AccountGateway {
   });
   Future<void> deleteShift(String teamId, int version, String shiftId);
   Future<void> publishPlan(String teamId, int version);
+  Future<LeaveInbox> readLeaves(String teamId);
+  Future<void> createLeave(
+    String teamId,
+    int version,
+    DateTime start,
+    DateTime end,
+    String description,
+  );
+  Future<void> actOnLeave(
+    String teamId,
+    int version,
+    String requestId,
+    int revision,
+    String action,
+    String reason,
+  );
   void dispose();
 }
 
@@ -428,6 +445,57 @@ class SupabaseAccountGateway implements AccountGateway {
   }
 
   @override
+  Future<LeaveInbox> readLeaves(String teamId) async {
+    final data = await _client.rpc(
+      'read_team_leaves',
+      params: {'target_team': teamId},
+    );
+    return LeaveInbox.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  @override
+  Future<void> createLeave(
+    String teamId,
+    int version,
+    DateTime start,
+    DateTime end,
+    String description,
+  ) async {
+    await _client.rpc(
+      'create_team_leave',
+      params: {
+        'target_team': teamId,
+        'expected_version': version,
+        'first_day': leaveDate(start),
+        'last_day': leaveDate(end),
+        'explanation': description.trim(),
+      },
+    );
+  }
+
+  @override
+  Future<void> actOnLeave(
+    String teamId,
+    int version,
+    String requestId,
+    int revision,
+    String action,
+    String reason,
+  ) async {
+    await _client.rpc(
+      'act_on_team_leave',
+      params: {
+        'target_team': teamId,
+        'expected_version': version,
+        'target_request': requestId,
+        'expected_revision': revision,
+        'action': action,
+        'reason': reason.trim(),
+      },
+    );
+  }
+
+  @override
   void dispose() {
     unawaited(_auth?.cancel());
     unawaited(_links?.cancel());
@@ -451,8 +519,17 @@ String accountError(Object e) {
     };
   }
   if (e is PostgrestException) {
+    if (e.code == 'P1001') {
+      return 'Vardiya onaylanmış izinle çakışıyor. İzin günlerine vardiya atanamaz.';
+    }
+    if (e.code == 'P1002') {
+      return 'İzin, taslak veya yayımlanmış vardiyayla çakışıyor. Planı düzenleyip yeniden yayımlayın; talepleri yenileyin.';
+    }
+    if (e.code == 'P1003') {
+      return 'Bu günlerde bekleyen veya onaylanmış başka izin talebiniz var.';
+    }
     if (e.code == '40001') {
-      return 'Plan başka bir işlemle değişti. Yenile düğmesiyle güncel planı alın; değişikliğinizi yeniden yapın.';
+      return 'Plan veya talep başka bir işlemle değişti. Yenile düğmesiyle güncel veriyi alın; işlemi yeniden yapın.';
     }
     if (e.code == '23P01') {
       return 'Bu üyenin aynı saatte başka bir taslak vardiyası var. Tarih ve saatleri kontrol edin.';
@@ -466,6 +543,16 @@ String accountError(Object e) {
   return 'Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
 }
 
+String leaveError(Object e) {
+  if (e is PostgrestException && e.code == '42501') {
+    return 'Bu ekipte bu izin işlemi için yetkiniz yok. Kendi hesabınızı ve ekip rolünüzü kontrol edin.';
+  }
+  if (e is PostgrestException && e.code == '22023') {
+    return 'Bitiş günü başlangıçtan önce olamaz. Açıklama ve gerekçe en fazla 500 karakter olmalı; ret ve onaylı izin iptalinde gerekçe gerekir.';
+  }
+  return accountError(e);
+}
+
 class AccountController extends ChangeNotifier {
   AccountController(this.gateway);
   final AccountGateway gateway;
@@ -477,6 +564,9 @@ class AccountController extends ChangeNotifier {
   CreatedInvite? createdInvite;
   InvitePreview? invitePreview;
   String? _previewCode;
+  LeaveInbox? leaveInbox;
+  bool loadingLeaves = false, leavesStale = false;
+  int _leaveGeneration = 0;
   CloudPlan? plan;
   bool loadingPlan = false, planDraft = false, planStale = false;
   int _planGeneration = 0;
@@ -485,6 +575,10 @@ class AccountController extends ChangeNotifier {
   int _previewGeneration = 0;
   void clearTeamDetails() {
     _detailGeneration++;
+    _leaveGeneration++;
+    leaveInbox = null;
+    loadingLeaves = false;
+    leavesStale = false;
     _planGeneration++;
     plan = null;
     loadingPlan = false;
@@ -591,7 +685,11 @@ class AccountController extends ChangeNotifier {
     }
   }
 
-  Future<bool> run(Future<void> Function() action, {String? success}) async {
+  Future<bool> run(
+    Future<void> Function() action, {
+    String? success,
+    String Function(Object)? errorMessage,
+  }) async {
     if (busy) {
       return false;
     }
@@ -608,7 +706,7 @@ class AccountController extends ChangeNotifier {
       return true;
     } catch (e) {
       if (epoch == _generation) {
-        error = accountError(e);
+        error = (errorMessage ?? accountError)(e);
       }
       return false;
     } finally {
@@ -812,6 +910,77 @@ class AccountController extends ChangeNotifier {
   Future<bool> deletePlanShift(String id) =>
       changePlan((team, version) => gateway.deleteShift(team, version, id));
   Future<bool> publishPlan() => changePlan(gateway.publishPlan);
+
+  Future<void> loadLeaves() async {
+    final team = selectedTeam;
+    if (team == null || user == null) return;
+    final epoch = _generation, request = ++_leaveGeneration;
+    loadingLeaves = true;
+    leaveInbox = null;
+    error = null;
+    emit();
+    try {
+      final result = await gateway
+          .readLeaves(team.id)
+          .timeout(const Duration(seconds: 30));
+      if (epoch == _generation && request == _leaveGeneration && !_disposed) {
+        leaveInbox = result;
+        leavesStale = false;
+      }
+    } catch (e) {
+      if (epoch == _generation && request == _leaveGeneration) {
+        error = leaveError(e);
+      }
+    } finally {
+      if (epoch == _generation && request == _leaveGeneration) {
+        loadingLeaves = false;
+        emit();
+      }
+    }
+  }
+
+  Future<bool> changeLeave(Future<void> Function(String, int) action) async {
+    final team = selectedTeam, snapshot = leaveInbox;
+    if (team == null ||
+        user == null ||
+        snapshot == null ||
+        loadingLeaves ||
+        leavesStale ||
+        busy) {
+      return false;
+    }
+    final epoch = _generation, request = _leaveGeneration;
+    final ok = await run(
+      () => action(team.id, snapshot.version),
+      errorMessage: leaveError,
+    );
+    if (epoch != _generation || request != _leaveGeneration || _disposed) {
+      return false;
+    }
+    if (ok) {
+      // All leave writes advance the shared team version. Cached plans must be refreshed.
+      _planGeneration++;
+      plan = null;
+      loadingPlan = false;
+      planStale = true;
+      await loadLeaves();
+    } else {
+      leavesStale = true;
+      emit();
+    }
+    return ok;
+  }
+
+  Future<bool> createLeave(DateTime start, DateTime end, String description) =>
+      changeLeave(
+        (team, version) =>
+            gateway.createLeave(team, version, start, end, description),
+      );
+  Future<bool> actOnLeave(LeaveRequest r, String action, String reason) =>
+      changeLeave(
+        (team, version) =>
+            gateway.actOnLeave(team, version, r.id, r.revision, action, reason),
+      );
 
   @override
   void dispose() {

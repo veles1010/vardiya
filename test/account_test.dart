@@ -7,6 +7,7 @@ import 'package:vardiya/account/account_service.dart';
 import 'package:vardiya/main.dart';
 import 'package:vardiya/domain.dart';
 import 'package:vardiya/account/plan_model.dart';
+import 'package:vardiya/account/leave_model.dart';
 
 import 'support.dart';
 import 'widget_test.dart' show click, fill;
@@ -97,6 +98,25 @@ class FakeAccountGateway implements AccountGateway {
   Future<void> deleteShift(String teamId, int version, String shiftId) async {}
   @override
   Future<void> publishPlan(String teamId, int version) async {}
+  @override
+  Future<LeaveInbox> readLeaves(String teamId) async => const LeaveInbox(0, []);
+  @override
+  Future<void> createLeave(
+    String teamId,
+    int version,
+    DateTime start,
+    DateTime end,
+    String description,
+  ) async {}
+  @override
+  Future<void> actOnLeave(
+    String teamId,
+    int version,
+    String requestId,
+    int revision,
+    String action,
+    String reason,
+  ) async {}
   @override
   void dispose() {
     unawaited(events.close());

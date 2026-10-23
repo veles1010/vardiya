@@ -286,7 +286,24 @@ class _TeamPlanPageState extends State<TeamPlanPage> {
                   'Haftanın planlanan net çalışma süresi${team.canManage ? ' (ekip)' : ''}: ${durationText(shifts.fold(0.0, (v, s) => v + s.netInPeriod(week, until)))}',
                 ),
                 const SizedBox(height: 12),
-                if (!c.planDraft && plan.publishedVersion == null)
+                if (constraints.maxWidth < 900 || !team.canManage)
+                  for (final leave in plan.leaves.where(
+                    (l) => selectedDay == null
+                        ? l.intersects(week, until)
+                        : l.contains(selectedDay!),
+                  ))
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.beach_access_outlined),
+                        title: Text('İzinli · ${memberName(leave.userId)}'),
+                        subtitle: Text(
+                          '${dateText(leave.start)} – ${dateText(leave.end)} (günler dahil)\nOnaylandı · Çalışma süresine eklenmez',
+                        ),
+                      ),
+                    ),
+                if (!c.planDraft &&
+                    plan.publishedVersion == null &&
+                    plan.leaves.isEmpty)
                   const EmptyState('Bu ekip için henüz program yayımlanmadı.')
                 else if (constraints.maxWidth >= 900 && team.canManage)
                   grid(shifts)
@@ -359,6 +376,15 @@ class _TeamPlanPageState extends State<TeamPlanPage> {
                   padding: const EdgeInsets.all(6),
                   child: Column(
                     children: [
+                      if (c.plan!.leaves.any(
+                        (l) =>
+                            l.userId == member.id &&
+                            l.contains(week.add(Duration(days: i))),
+                      ))
+                        const Chip(
+                          avatar: Icon(Icons.beach_access_outlined, size: 18),
+                          label: Text('İzinli'),
+                        ),
                       for (final s in shifts.where(
                         (s) =>
                             s.employeeId == member.id &&
